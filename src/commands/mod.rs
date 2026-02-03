@@ -5,5 +5,8 @@ pub mod hook;
 pub mod info;
 pub mod init;
 pub mod log;
+pub mod pull;
+pub mod push;
+pub mod remote;
 pub mod rm;
 pub mod status;

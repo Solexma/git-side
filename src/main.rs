@@ -67,6 +67,19 @@ enum Commands {
 
     /// Show info about git-side and current project
     Info,
+
+    /// Manage side repo remotes (add, remove, list)
+    Remote {
+        /// Arguments to pass to git remote (e.g., "add origin <url>")
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+
+    /// Push side repo to remote (force push, local wins)
+    Push,
+
+    /// Pull side repo from remote
+    Pull,
 }
 
 #[derive(Subcommand)]
@@ -102,6 +115,9 @@ fn main() -> ExitCode {
             HookAction::Uninstall { on } => commands::hook::uninstall(&on),
         },
         Commands::Info => commands::info::run(),
+        Commands::Remote { args } => commands::remote::run(&args),
+        Commands::Push => commands::push::run(),
+        Commands::Pull => commands::pull::run(),
     };
 
     match result {
