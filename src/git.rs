@@ -30,10 +30,8 @@ pub fn run(args: &[&str]) -> Result<String> {
 pub fn run_with_paths(git_dir: &Path, work_tree: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("git")
         .current_dir(work_tree)
-        .arg("--git-dir")
-        .arg(git_dir)
-        .arg("--work-tree")
-        .arg(work_tree)
+        .env("GIT_DIR", git_dir)
+        .env("GIT_WORK_TREE", work_tree)
         .args(args)
         .output()
         .map_err(|e| Error::GitCommandFailed(format!("failed to execute git: {e}")))?;
