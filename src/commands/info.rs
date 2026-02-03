@@ -32,16 +32,16 @@ pub fn run() -> Result<()> {
         println!("  Side repo: {}", repo.git_dir.display());
         println!("  Initialized: {}", if repo.is_initialized() { "yes".green() } else { "no".yellow() });
 
-        if repo.is_initialized() {
-            if let Ok(tracked) = TrackedPaths::load(&repo) {
-                let paths: Vec<_> = tracked.paths().iter().collect();
-                if paths.is_empty() {
-                    println!("  Tracked paths: {}", "none".yellow());
-                } else {
-                    println!("  Tracked paths:");
-                    for path in paths {
-                        println!("    - {}", path.display());
-                    }
+        if repo.is_initialized()
+            && let Ok(tracked) = TrackedPaths::load(&repo)
+        {
+            let paths: Vec<_> = tracked.paths().iter().collect();
+            if paths.is_empty() {
+                println!("  Tracked paths: {}", "none".yellow());
+            } else {
+                println!("  Tracked paths:");
+                for path in paths {
+                    println!("    - {}", path.display());
                 }
             }
         }

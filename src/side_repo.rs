@@ -205,7 +205,7 @@ impl SideRepo {
     }
 
     /// Stage the .side-tracked file using git plumbing.
-    /// Since .side-tracked lives in git_dir (not work_tree), we use hash-object + update-index.
+    /// Since `.side-tracked` lives in `git_dir` (not `work_tree`), we use `hash-object` + `update-index`.
     ///
     /// # Errors
     ///
