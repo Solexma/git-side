@@ -1,0 +1,25 @@
+[package]
+name = "git-side"
+version = "0.1.0"
+edition = "2024"
+description = "A Git subcommand that versions files and directories that should not live in the main repository, using a per-project bare repository invisible to Git."
+authors = ["MiPnamic <mipnamic@mipnamic.net>"]
+license = "MIT"
+repository = "https://github.com/Solexma/git-side"
+
+[dependencies]
+clap = { version = "4.5.56", features = ["derive"] }
+colored = "3.1.1"
+dirs = "6.0.0"
+thiserror = "2.0.18"
+
+[dev-dependencies]
+clippy = "0.0.302"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
