@@ -107,22 +107,21 @@ impl SideRepo {
     }
 
     /// Stage paths with update flag (handles modifications and deletions).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if initialization or staging fails.
-    pub fn stage_update(&self, paths: &[PathBuf]) -> Result<()> {
+    /// Errors are ignored since paths may not be in the index yet.
+    pub fn stage_update(&self, paths: &[PathBuf]) {
         if paths.is_empty() {
-            return Ok(());
+            return;
         }
-        self.ensure_initialized()?;
+        if self.ensure_initialized().is_err() {
+            return;
+        }
 
         let path_strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         let mut args: Vec<&str> = vec!["add", "-f", "-u", "--"];
         args.extend(path_strs.iter().map(String::as_str));
 
-        self.git(&args)?;
-        Ok(())
+        // Ignore errors — paths may not be in the index yet
+        let _ = self.git(&args);
     }
 
     /// Stage paths (adds new files).

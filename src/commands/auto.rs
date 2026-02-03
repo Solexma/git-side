@@ -31,8 +31,8 @@ pub fn run() -> Result<()> {
     let tracked_paths: Vec<_> = tracked.paths().iter().cloned().collect();
 
     // Two-pass staging:
-    // Pass 1: update tracked files (modifications + deletions)
-    repo.stage_update(&tracked_paths)?;
+    // Pass 1: update tracked files (modifications + deletions) — errors ignored
+    repo.stage_update(&tracked_paths);
 
     // Pass 2: add new files
     repo.stage_new(&tracked_paths)?;

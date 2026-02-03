@@ -29,6 +29,7 @@ pub fn run(args: &[&str]) -> Result<String> {
 /// Returns an error if the git command fails to execute or exits with non-zero status.
 pub fn run_with_paths(git_dir: &Path, work_tree: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("git")
+        .current_dir(work_tree)
         .arg("--git-dir")
         .arg(git_dir)
         .arg("--work-tree")
