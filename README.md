@@ -48,7 +48,11 @@ You can set a custom base path per project:
 git side init --path /mnt/external/side-repos/
 ```
 
-This stores the mapping in `~/.config/git-side/paths` — no changes to the main repo.
+This stores the mapping in the config directory — no changes to the main repo.
+
+Config and data paths are platform-specific:
+- **Linux**: `~/.config/git-side/` (config), `~/.local/share/git-side/` (repos)
+- **macOS**: `~/Library/Application Support/git-side/` (both)
 
 The project directory itself is used as the **work-tree**.
 

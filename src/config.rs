@@ -4,19 +4,19 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
-/// Get the config directory path (~/.config/git-side/).
+/// Get the config directory path (platform-specific via `dirs::config_dir()`).
 fn config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("~/.config"))
         .join("git-side")
 }
 
-/// Get the cache file path (~/.config/git-side/cache).
+/// Get the cache file path.
 fn cache_file() -> PathBuf {
     config_dir().join("cache")
 }
 
-/// Get the paths file path (~/.config/git-side/paths).
+/// Get the paths file path.
 fn paths_file() -> PathBuf {
     config_dir().join("paths")
 }
