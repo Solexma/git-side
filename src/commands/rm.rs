@@ -45,6 +45,9 @@ pub fn run(path: &Path) -> Result<()> {
     // Unstage from side repo
     repo.unstage(&relative_path)?;
 
+    // Stage updated .side-tracked file
+    repo.stage_tracked_file()?;
+
     println!(
         "{} {}",
         "Untracked:".yellow().bold(),

@@ -48,6 +48,9 @@ pub fn run(path: &Path) -> Result<()> {
     // Stage the path
     repo.stage(&relative_path)?;
 
+    // Stage .side-tracked file itself
+    repo.stage_tracked_file()?;
+
     println!(
         "{} {}",
         "Tracking:".green().bold(),

@@ -203,4 +203,28 @@ impl SideRepo {
         let _ = self.git(&["rm", "--cached", "-r", "--ignore-unmatch", &path_str]);
         Ok(())
     }
+
+    /// Stage the .side-tracked file using git plumbing.
+    /// Since .side-tracked lives in git_dir (not work_tree), we use hash-object + update-index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file doesn't exist or git commands fail.
+    pub fn stage_tracked_file(&self) -> Result<()> {
+        let tracked_file = self.tracked_file();
+        if !tracked_file.exists() {
+            return Ok(());
+        }
+
+        // Hash the file and write to object store
+        let tracked_path_str = tracked_file.to_string_lossy();
+        let sha = self.git(&["hash-object", "-w", &tracked_path_str])?;
+        let sha = sha.trim();
+
+        // Add to index with name .side-tracked at repo root
+        let cacheinfo = format!("100644,{sha},.side-tracked");
+        self.git(&["update-index", "--add", "--cacheinfo", &cacheinfo])?;
+
+        Ok(())
+    }
 }

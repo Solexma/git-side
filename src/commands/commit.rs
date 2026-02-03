@@ -11,6 +11,10 @@ use crate::side_repo::SideRepo;
 pub fn run(message: &str) -> Result<()> {
     let repo = SideRepo::open()?;
     repo.ensure_initialized()?;
+
+    // Always stage .side-tracked to ensure it's included
+    repo.stage_tracked_file()?;
+
     repo.commit(message)?;
 
     println!("{}", "Committed to side repo.".green().bold());

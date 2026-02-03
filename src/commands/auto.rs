@@ -37,6 +37,9 @@ pub fn run() -> Result<()> {
     // Pass 2: add new files
     repo.stage_new(&tracked_paths)?;
 
+    // Stage .side-tracked file itself (self-aware versioning)
+    repo.stage_tracked_file()?;
+
     // Get last commit message from main repo
     let message = git::last_commit_message()?;
 
