@@ -127,6 +127,10 @@ git side auto                          # sync side-tracked paths and commit usin
 git side init --path <dir>             # set custom base path for this project's side repo
 git side hook install [--on <hook>]    # install git hook to run auto (default: post-commit)
 git side hook uninstall [--on <hook>]  # remove git hook
+git side info                          # show info about git-side and current project
+git side remote [<args>]               # manage remotes (pass-through to git remote)
+git side push                          # push to origin/main (force, local wins)
+git side pull                          # pull from origin/main (force, remote wins)
 ```
 
 If you know Git, you already know `git-side`.
@@ -148,6 +152,28 @@ git side auto
 
 Untracked files from the main project are hidden by default.
 
+### Remote sync
+
+```bash
+# add a remote to your side repo
+git side remote add origin git@github.com:user/project-side.git
+
+# push (force, local always wins)
+git side push
+
+# pull (force, remote always wins)
+git side pull
+
+# list remotes
+git side remote
+```
+
+Push and pull are intentionally simple and conflict-free:
+- **push** uses `--force` — your local side repo always wins
+- **pull** uses `fetch` + `reset --hard` — the remote always wins
+
+This matches the "local-only state" philosophy. If you need merge semantics, you're probably tracking the wrong files.
+
 ## Design goals
 
 - Git-native behavior
@@ -161,13 +187,13 @@ Untracked files from the main project are hidden by default.
 
 `git-side` intentionally does not:
 
-- sync data across machines
+- handle merge conflicts (push/pull are force operations)
 - encrypt or secure files
 - replace secrets managers
 - act as a dotfiles manager
 - integrate with the main repo history
 
-**It is a local, explicit, opt-in tool.**
+**It is a local, explicit, opt-in tool.** Remote sync is supported but kept simple — no conflict resolution.
 
 ## Inspiration
 
