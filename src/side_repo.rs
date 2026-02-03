@@ -152,9 +152,10 @@ impl SideRepo {
     pub fn commit(&self, message: &str) -> Result<()> {
         self.ensure_initialized()?;
 
-        // Check if there's anything to commit
-        let status = self.git(&["status", "--porcelain"])?;
-        if status.is_empty() {
+        // Check if there's anything staged to commit
+        // diff --cached --quiet exits with 1 if there are staged changes, 0 if none
+        let has_staged = self.git(&["diff", "--cached", "--quiet"]).is_err();
+        if !has_staged {
             return Err(Error::NothingToCommit);
         }
 
