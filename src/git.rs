@@ -32,6 +32,10 @@ pub fn run_with_paths(git_dir: &Path, work_tree: &Path, args: &[&str]) -> Result
         .current_dir(work_tree)
         .env("GIT_DIR", git_dir)
         .env("GIT_WORK_TREE", work_tree)
+        // Clear any inherited git environment from hooks
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .args(args)
         .output()
         .map_err(|e| Error::GitCommandFailed(format!("failed to execute git: {e}")))?;
