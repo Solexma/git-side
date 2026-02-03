@@ -64,6 +64,9 @@ enum Commands {
         #[command(subcommand)]
         action: HookAction,
     },
+
+    /// Show info about git-side and current project
+    Info,
 }
 
 #[derive(Subcommand)]
@@ -98,6 +101,7 @@ fn main() -> ExitCode {
             HookAction::Install { on } => commands::hook::install(&on),
             HookAction::Uninstall { on } => commands::hook::uninstall(&on),
         },
+        Commands::Info => commands::info::run(),
     };
 
     match result {
