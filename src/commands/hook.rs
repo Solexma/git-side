@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
@@ -75,18 +76,21 @@ pub fn install(hook_name: &str) -> Result<()> {
         source: e,
     })?;
 
-    // Make executable
-    let mut perms = fs::metadata(&path)
-        .map_err(|e| Error::ReadFile {
+    // Make executable (Unix only - Windows doesn't need this)
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&path)
+            .map_err(|e| Error::ReadFile {
+                path: path.clone(),
+                source: e,
+            })?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).map_err(|e| Error::WriteFile {
             path: path.clone(),
             source: e,
-        })?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&path, perms).map_err(|e| Error::WriteFile {
-        path: path.clone(),
-        source: e,
-    })?;
+        })?;
+    }
 
     println!(
         "{} {} hook installed",
