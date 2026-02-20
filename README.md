@@ -102,7 +102,28 @@ This is a feature, not a workaround.
 
 ## Installation
 
+### Pre-built binaries
+
+Download the latest binary for your platform from the [Releases](https://github.com/Solexma/git-side/releases) page.
+
+**Linux / macOS:**
+
+```bash
+chmod +x git-side-*
+sudo mv git-side-* /usr/local/bin/git-side
+```
+
+**Windows:**
+
+Rename `git-side-windows-amd64.exe` to `git-side.exe` and move it to a directory in your `%PATH%`.
+
 ### From source (Rust)
+
+```bash
+cargo install --git https://github.com/Solexma/git-side.git
+```
+
+Or build manually:
 
 ```bash
 cargo build --release
