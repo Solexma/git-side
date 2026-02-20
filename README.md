@@ -127,7 +127,7 @@ git side rm <path>                     # untrack path from side repo
 git side status                        # show side repo status
 git side commit -m "msg"               # commit in side repo
 git side log                           # show side repo history
-git side auto                          # sync side-tracked paths and commit using last main repo message
+git side auto                          # sync, commit, and push (if remote exists) using last main repo message
 git side init --path <dir>             # set custom base path for this project's side repo
 git side hook install [--on <hook>]    # install git hook to run auto (default: post-commit)
 git side hook uninstall [--on <hook>]  # remove git hook
@@ -175,6 +175,8 @@ git side remote
 Push and pull are intentionally simple and conflict-free:
 - **push** uses `--force` — your local side repo always wins
 - **pull** uses `fetch` + `reset --hard` — the remote always wins
+
+`git side auto` will also push automatically if a remote is configured. If no remote exists, the push is silently skipped.
 
 This matches the "local-only state" philosophy. If you need merge semantics, you're probably tracking the wrong files.
 
