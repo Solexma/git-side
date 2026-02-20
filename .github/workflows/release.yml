@@ -3,6 +3,11 @@ name: Release Binaries
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload assets to (e.g. v0.2.3)"
+        required: true
 
 permissions:
   contents: write
@@ -47,6 +52,6 @@ jobs:
         run: mv target/${{ matrix.target }}/release/git-side.exe ${{ matrix.binary_name }}
 
       - name: Upload release asset
-        run: gh release upload ${{ github.event.release.tag_name }} ${{ matrix.binary_name }} --clobber
+        run: gh release upload ${{ github.event.release.tag_name || inputs.tag }} ${{ matrix.binary_name }} --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
