@@ -49,21 +49,29 @@ pub fn run() -> Result<()> {
         ));
     }
 
+    let prefix = "[git-side]".dimmed();
+
     // Commit (will return NothingToCommit if nothing changed)
     match repo.commit(&message) {
         Ok(()) => {
             println!(
-                "{} {}",
+                "{} {} {}",
+                prefix,
                 "Auto-committed:".green().bold(),
                 message.lines().next().unwrap_or(&message)
             );
             println!(
-                "  {} file(s) synced",
+                "{} {} file(s) synced",
+                prefix,
                 files.len().to_string().cyan()
             );
+            // Try to push — silently ignored if no remote
+            if repo.push().is_ok() {
+                println!("{} {}", prefix, "Pushed to remote.".green().bold());
+            }
         }
         Err(Error::NothingToCommit) => {
-            println!("{}", "Nothing to commit (side repo is up to date).".yellow());
+            println!("{} {}", prefix, "Nothing to commit (side repo is up to date).".yellow());
         }
         Err(e) => return Err(e),
     }

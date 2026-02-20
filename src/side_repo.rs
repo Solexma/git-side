@@ -204,6 +204,16 @@ impl SideRepo {
         Ok(())
     }
 
+    /// Force push to origin/main.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the push fails (e.g. no remote configured).
+    pub fn push(&self) -> Result<()> {
+        self.git(&["push", "-u", "--force", "origin", "main"])?;
+        Ok(())
+    }
+
     /// Stage the .side-tracked file using git plumbing.
     /// Since `.side-tracked` lives in `git_dir` (not `work_tree`), we use `hash-object` + `update-index`.
     ///

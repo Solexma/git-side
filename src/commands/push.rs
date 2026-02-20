@@ -14,7 +14,7 @@ pub fn run() -> Result<()> {
     repo.ensure_initialized()?;
 
     // Force push to origin main — local wins, no questions asked
-    repo.git(&["push", "-u", "--force", "origin", "main"])?;
+    repo.push()?;
 
     println!("{}", "Pushed to remote.".green().bold());
     Ok(())
