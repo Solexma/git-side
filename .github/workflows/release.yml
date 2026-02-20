@@ -1,0 +1,52 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            binary_name: git-side-linux-amd64
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            binary_name: git-side-darwin-arm64
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            binary_name: git-side-darwin-amd64
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            binary_name: git-side-windows-amd64.exe
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename binary (unix)
+        if: runner.os != 'Windows'
+        run: mv target/${{ matrix.target }}/release/git-side ${{ matrix.binary_name }}
+
+      - name: Rename binary (windows)
+        if: runner.os == 'Windows'
+        run: mv target/${{ matrix.target }}/release/git-side.exe ${{ matrix.binary_name }}
+
+      - name: Upload release asset
+        run: gh release upload ${{ github.event.release.tag_name }} ${{ matrix.binary_name }} --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
