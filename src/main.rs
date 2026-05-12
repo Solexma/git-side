@@ -45,7 +45,7 @@ enum Commands {
     /// Show side repo history
     Log {
         /// Additional arguments to pass to git log
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
@@ -78,7 +78,7 @@ enum Commands {
     /// Manage side repo remotes (add, remove, list)
     Remote {
         /// Arguments to pass to git remote (e.g., "add origin <url>")
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
