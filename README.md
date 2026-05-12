@@ -148,6 +148,7 @@ git side rm <path>                     # untrack path from side repo
 git side status                        # show side repo status
 git side commit -m "msg"               # commit in side repo
 git side log                           # show side repo history
+git side ls-files [<args>]             # list files in side repo (pass-through to git ls-files)
 git side auto                          # sync, commit, and push (if remote exists) using last main repo message
 git side init --path <dir>             # set custom base path for this project's side repo
 git side hook install [--on <hook>]    # install git hook to run auto (default: post-commit)
