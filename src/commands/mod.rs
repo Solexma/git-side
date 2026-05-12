@@ -5,6 +5,7 @@ pub mod hook;
 pub mod info;
 pub mod init;
 pub mod log;
+pub mod ls_files;
 pub mod pull;
 pub mod push;
 pub mod remote;

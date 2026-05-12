@@ -49,6 +49,13 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// List files tracked in the side repo (mirrors git ls-files)
+    LsFiles {
+        /// Additional arguments to pass to git ls-files
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+
     /// Sync side-tracked paths and commit using last main repo message
     Auto,
 
@@ -108,6 +115,7 @@ fn main() -> ExitCode {
         Commands::Status => commands::status::run(),
         Commands::Commit { message } => commands::commit::run(&message),
         Commands::Log { args } => commands::log::run(&args),
+        Commands::LsFiles { args } => commands::ls_files::run(&args),
         Commands::Auto => commands::auto::run(),
         Commands::Init { path } => commands::init::run(path.as_deref()),
         Commands::Hook { action } => match action {

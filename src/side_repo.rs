@@ -214,6 +214,23 @@ impl SideRepo {
         Ok(())
     }
 
+    /// List files in the side repo's index. Mirrors `git ls-files`.
+    ///
+    /// Returns an empty string if the side repo is not initialized,
+    /// so scripting consumers can pipe safely on fresh clones.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying `git ls-files` command fails.
+    pub fn ls_files(&self, args: &[&str]) -> Result<String> {
+        if !self.is_initialized() {
+            return Ok(String::new());
+        }
+        let mut ls_args = vec!["ls-files"];
+        ls_args.extend(args);
+        self.git(&ls_args)
+    }
+
     /// Stage the .side-tracked file using git plumbing.
     /// Since `.side-tracked` lives in `git_dir` (not `work_tree`), we use `hash-object` + `update-index`.
     ///
