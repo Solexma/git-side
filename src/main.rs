@@ -52,7 +52,7 @@ enum Commands {
     /// List files tracked in the side repo (mirrors git ls-files)
     LsFiles {
         /// Additional arguments to pass to git ls-files
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
