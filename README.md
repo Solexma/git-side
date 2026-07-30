@@ -50,6 +50,15 @@ git side init --path /mnt/external/side-repos/
 
 This stores the mapping in the config directory — no changes to the main repo.
 
+To relocate the default for every project at once — e.g. onto a durable mount
+in a container — set the `GIT_SIDE_BASE_PATH` environment variable:
+
+```bash
+export GIT_SIDE_BASE_PATH=/mnt/side-repos
+```
+
+A per-project path set with `git side init --path` still takes precedence.
+
 Config and data paths are platform-specific:
 - **Linux**: `~/.config/git-side/` (config), `~/.local/share/git-side/` (repos)
 - **macOS**: `~/Library/Application Support/git-side/` (both)
