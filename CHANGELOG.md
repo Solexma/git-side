@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.4.1](https://github.com/Solexma/git-side/compare/v0.4.0...v0.4.1) (2026-10-13)
 
+Patch release for packagers: the integration tests now pass in build environments that override git's configuration, such as makepkg (`GIT_CONFIG_GLOBAL=/dev/null`), so source-built packages like the AUR's can run `cargo test` in `check()`. No change to the `git-side` binary itself.
+
 
 ### Bug Fixes
 
