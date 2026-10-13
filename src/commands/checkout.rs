@@ -16,9 +16,9 @@ pub fn run() -> Result<()> {
     if !repo.has_side_repo() {
         return Err(Error::NoSideRepo);
     }
-    repo.ensure_initialized()?;
-
-    let written = repo.materialize()?;
+    // Setting up a fresh worktree already checks the files out.
+    let mut written = repo.initialize()?;
+    written.extend(repo.materialize()?);
     if written.is_empty() {
         println!("{}", "Side files already present.".green());
     } else {

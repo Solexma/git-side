@@ -49,13 +49,13 @@ pub fn run() -> Result<()> {
             }
         }
 
-        if repo.worktree.is_none() {
-            let unmerged = repo.unmerged_worktree_branches();
-            if !unmerged.is_empty() {
-                println!("  Unmerged worktree branches (git side merge <branch>):");
-                for branch in unmerged {
-                    println!("    - {}", branch.yellow());
-                }
+        let unmerged = repo.unmerged_worktree_branches();
+        if !unmerged.is_empty() {
+            println!("  Unmerged worktree branches (git side merge <branch>, from the main checkout):");
+            let current = repo.branch();
+            for branch in unmerged {
+                let note = if branch == current { " (this worktree)" } else { "" };
+                println!("    - {}{note}", branch.yellow());
             }
         }
     }

@@ -102,8 +102,18 @@ impl SideRepo {
     ///
     /// Returns an error if the directory cannot be created or git init fails.
     pub fn ensure_initialized(&self) -> Result<()> {
+        self.initialize().map(drop)
+    }
+
+    /// Like `ensure_initialized`, returning the side files checked out while
+    /// setting up a linked worktree (empty if nothing was set up).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created or git init fails.
+    pub fn initialize(&self) -> Result<Vec<String>> {
         if self.is_initialized() {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         if !self.has_side_repo() {
@@ -118,7 +128,8 @@ impl SideRepo {
         }
 
         let Some(name) = &self.worktree else {
-            return self.ensure_config();
+            self.ensure_config()?;
+            return Ok(Vec::new());
         };
         // A half-initialized worktree (HEAD written, index not populated)
         // would make the next auto record every side file as deleted.
@@ -133,8 +144,8 @@ impl SideRepo {
     /// previous worktree with the same name is reused only if it holds work
     /// not merged into `main`. Side files missing from the worktree are then
     /// checked out, so that "never checked out here" is not mistaken for
-    /// "deleted".
-    fn init_worktree(&self, name: &str) -> Result<()> {
+    /// "deleted". Returns the files checked out.
+    fn init_worktree(&self, name: &str) -> Result<Vec<String>> {
         let branch = format!("refs/heads/wt/{name}");
         let has_main = self.ref_exists("refs/heads/main");
         if self.ref_exists(&branch) {
@@ -160,9 +171,9 @@ impl SideRepo {
         if self.git(&["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok() {
             self.git(&["read-tree", "HEAD"])?;
             self.hide_tracked_list()?;
-            self.materialize()?;
+            return self.materialize();
         }
-        Ok(())
+        Ok(Vec::new())
     }
 
     /// A worktree removed and re-added under the same name finds the old
@@ -324,6 +335,16 @@ impl SideRepo {
         .unwrap_or_default()
     }
 
+    /// Whether this worktree's side branch has commits not merged into
+    /// `main`. Always false in the main worktree.
+    #[must_use]
+    pub fn has_unmerged_commits(&self) -> bool {
+        let range = format!("refs/heads/main..refs/heads/{}", self.branch());
+        self.worktree.is_some()
+            && self.ref_exists("refs/heads/main")
+            && self.git_common(&["rev-list", "--count", &range]).is_ok_and(|n| n.trim() != "0")
+    }
+
     /// Run a git command in the context of the side repo.
     ///
     /// # Errors
@@ -456,7 +477,16 @@ impl SideRepo {
         // Sparse checkout only exists to keep the tracked list out of the
         // work-tree; without it status skips the "sparse checkout" notice,
         // and the skip-worktree bit still hides the list.
-        self.git(&["-c", "core.sparseCheckout=false", "status"])
+        let out = self.git(&["-c", "core.sparseCheckout=false", "status"])?;
+        if !self.has_unmerged_commits() {
+            return Ok(out);
+        }
+        let name = self.worktree.as_deref().unwrap_or_default();
+        Ok(format!(
+            "{out}\n\nSide branch {} has commits not merged into main.\n\
+             Run 'git side merge {name}' from the main checkout to keep them.",
+            self.branch()
+        ))
     }
 
     /// Get log output.
