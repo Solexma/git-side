@@ -29,7 +29,10 @@ pub fn run() -> Result<()> {
     if let Ok(repo) = SideRepo::open() {
         println!("{}", "Current project:".cyan());
         println!("  Root SHA: {}", repo.root_sha);
-        println!("  Side repo: {}", repo.git_dir.display());
+        println!("  Side repo: {}", repo.common_dir.display());
+        if let Some(name) = &repo.worktree {
+            println!("  Worktree: {name} (side branch wt/{name})");
+        }
         println!("  Initialized: {}", if repo.is_initialized() { "yes".green() } else { "no".yellow() });
 
         if repo.is_initialized()
@@ -42,6 +45,16 @@ pub fn run() -> Result<()> {
                 println!("  Tracked paths:");
                 for path in paths {
                     println!("    - {}", path.display());
+                }
+            }
+        }
+
+        if repo.worktree.is_none() {
+            let unmerged = repo.unmerged_worktree_branches();
+            if !unmerged.is_empty() {
+                println!("  Unmerged worktree branches (git side merge <name>):");
+                for branch in unmerged {
+                    println!("    - {}", branch.yellow());
                 }
             }
         }

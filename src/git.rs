@@ -107,3 +107,29 @@ pub fn initial_commit_sha() -> Result<String> {
 pub fn last_commit_message() -> Result<String> {
     run(&["log", "-1", "--format=%B"])
 }
+
+/// Name of the linked worktree we are in, or `None` in the main worktree.
+///
+/// In a linked worktree the git dir is `<common>/worktrees/<name>`.
+///
+/// # Errors
+///
+/// Returns an error if not inside a git repository.
+pub fn linked_worktree_name() -> Result<Option<String>> {
+    let out = run(&[
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+        "--git-common-dir",
+    ])?;
+    let mut lines = out.lines();
+    let (Some(git_dir), Some(common_dir)) = (lines.next(), lines.next()) else {
+        return Err(Error::GitCommandFailed(format!("unexpected rev-parse output: {out}")));
+    };
+    if git_dir == common_dir {
+        return Ok(None);
+    }
+    Ok(Path::new(git_dir)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned()))
+}

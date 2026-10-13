@@ -11,6 +11,7 @@ use crate::side_repo::SideRepo;
 /// Returns an error if the side repo cannot be opened or pull fails.
 pub fn run() -> Result<()> {
     let repo = SideRepo::open()?;
+    repo.require_main_worktree("pull")?;
     repo.ensure_initialized()?;
 
     // Fetch from origin

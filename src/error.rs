@@ -17,6 +17,21 @@ pub enum Error {
     #[error("path not tracked: {}", .0.display())]
     PathNotTracked(PathBuf),
 
+    #[error("'git side {0}' only works in the main worktree")]
+    MainWorktreeOnly(&'static str),
+
+    #[error("no side branch for '{0}' (expected a worktree name or 'main')")]
+    UnknownSideBranch(String),
+
+    #[error("cannot merge '{0}' into itself")]
+    MergeIntoSelf(String),
+
+    #[error("merge conflict in: {0}\nresolve the files, then run 'git side merge --continue' (or 'git side merge --abort')")]
+    MergeConflict(String),
+
+    #[error("no side merge in progress")]
+    NoMergeInProgress,
+
     #[error("nothing to commit")]
     NothingToCommit,
 

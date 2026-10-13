@@ -59,6 +59,24 @@ enum Commands {
     /// Sync side-tracked paths and commit using last main repo message
     Auto,
 
+    /// Check out side files missing from this worktree (never overwrites)
+    Checkout,
+
+    /// Merge another worktree's side branch (or `main`) into this one
+    Merge {
+        /// Worktree name, or `main`
+        #[arg(required_unless_present_any = ["continue_", "abort"], conflicts_with_all = ["continue_", "abort"])]
+        name: Option<String>,
+
+        /// Commit after resolving conflicts
+        #[arg(long = "continue", conflicts_with = "abort")]
+        continue_: bool,
+
+        /// Abort the merge in progress
+        #[arg(long)]
+        abort: bool,
+    },
+
     /// Initialize side repo with optional custom path
     Init {
         /// Custom base path for side repo storage
@@ -117,6 +135,16 @@ fn main() -> ExitCode {
         Commands::Log { args } => commands::log::run(&args),
         Commands::LsFiles { args } => commands::ls_files::run(&args),
         Commands::Auto => commands::auto::run(),
+        Commands::Checkout => commands::checkout::run(),
+        // clap guarantees exactly one of name / --continue / --abort.
+        Commands::Merge { name, continue_, .. } => {
+            let action = match name.as_deref() {
+                Some(name) => commands::merge::Action::Start(name),
+                None if continue_ => commands::merge::Action::Continue,
+                None => commands::merge::Action::Abort,
+            };
+            commands::merge::run(&action)
+        }
         Commands::Init { path } => commands::init::run(path.as_deref()),
         Commands::Hook { action } => match action {
             HookAction::Install { on } => commands::hook::install(&on),
