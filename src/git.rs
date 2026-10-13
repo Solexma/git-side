@@ -68,16 +68,18 @@ pub fn repo_root() -> Result<PathBuf> {
     Ok(PathBuf::from(root))
 }
 
-/// Get the .git directory of the current repository.
+/// Get the hooks directory git actually runs hooks from.
+///
+/// Resolves to the common dir in linked worktrees and honours `core.hooksPath`.
 ///
 /// # Errors
 ///
 /// Returns an error if not inside a git repository.
-pub fn git_dir() -> Result<PathBuf> {
+pub fn hooks_dir() -> Result<PathBuf> {
     if !is_in_repo() {
         return Err(Error::NotInGitRepo);
     }
-    let dir = run(&["rev-parse", "--git-dir"])?;
+    let dir = run(&["rev-parse", "--git-path", "hooks"])?;
     Ok(PathBuf::from(dir))
 }
 
