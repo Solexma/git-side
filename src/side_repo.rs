@@ -42,11 +42,15 @@ impl SideRepo {
 
         let git_dir = base_path.join(&root_sha);
 
-        Ok(Self {
+        let repo = Self {
             git_dir,
             work_tree,
             root_sha,
-        })
+        };
+        if repo.is_initialized() {
+            repo.upgrade()?;
+        }
+        Ok(repo)
     }
 
     /// Check if the side repo has been initialized.
@@ -62,7 +66,7 @@ impl SideRepo {
     /// Returns an error if the directory cannot be created or git init fails.
     pub fn ensure_initialized(&self) -> Result<()> {
         if self.is_initialized() {
-            return self.ensure_main_branch();
+            return Ok(());
         }
 
         // Create parent directory
@@ -78,6 +82,42 @@ impl SideRepo {
         let git_dir_str = self.git_dir.to_string_lossy();
         git::run(&["init", "--bare", "--initial-branch=main", &git_dir_str])?;
 
+        self.ensure_sparse_checkout()
+    }
+
+    /// Bring side repos created by older versions up to date. Cheap when
+    /// there is nothing to do: no git process is spawned.
+    fn upgrade(&self) -> Result<()> {
+        self.ensure_main_branch()?;
+        self.ensure_sparse_checkout()
+    }
+
+    /// Keep `.side-tracked` out of the work-tree.
+    ///
+    /// The file is versioned in the side repo but lives in its git dir. A
+    /// non-cone sparse checkout excluding it stops git from writing it into
+    /// the project on `reset --hard`/`merge` and from reporting it as deleted.
+    /// `merge=union` lets path lists from different branches merge cleanly.
+    fn ensure_sparse_checkout(&self) -> Result<()> {
+        let sparse_file = self.git_dir.join("info").join("sparse-checkout");
+        if sparse_file.exists() {
+            return Ok(());
+        }
+
+        self.git(&["config", "core.sparseCheckout", "true"])?;
+        self.git(&["config", "core.sparseCheckoutCone", "false"])?;
+        write_file(&sparse_file, "/*\n!/.side-tracked\n")?;
+
+        let attributes = self.git_dir.join("info").join("attributes");
+        let existing = fs::read_to_string(&attributes).unwrap_or_default();
+        if !existing.contains(".side-tracked") {
+            write_file(&attributes, &format!("{existing}.side-tracked merge=union\n"))?;
+        }
+
+        if self.git(&["ls-files", "--cached", "--", ".side-tracked"])?.is_empty() {
+            return Ok(());
+        }
+        self.git(&["update-index", "--skip-worktree", ".side-tracked"])?;
         Ok(())
     }
 
@@ -230,7 +270,13 @@ impl SideRepo {
         if !self.is_initialized() {
             return Ok(String::from("Side repo not initialized. Use 'git side add <path>' to start tracking files."));
         }
-        self.git(&["status"])
+        let output = self.git(&["status"])?;
+        // Implementation detail of how .side-tracked is kept out of the work-tree.
+        Ok(output
+            .lines()
+            .filter(|line| !line.starts_with("You are in a sparse checkout"))
+            .collect::<Vec<_>>()
+            .join("\n"))
     }
 
     /// Get log output.
@@ -307,10 +353,36 @@ impl SideRepo {
         let sha = self.git(&["hash-object", "-w", &tracked_path_str])?;
         let sha = sha.trim();
 
-        // Add to index with name .side-tracked at repo root
+        // Add to index with name .side-tracked at repo root, never checked out
         let cacheinfo = format!("100644,{sha},.side-tracked");
         self.git(&["update-index", "--add", "--cacheinfo", &cacheinfo])?;
+        self.git(&["update-index", "--skip-worktree", ".side-tracked"])?;
 
         Ok(())
     }
+
+    /// Write the index version of `.side-tracked` back to the git dir.
+    /// Needed after anything that rewrites the index from a tree (pull, merge).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn sync_tracked_file(&self) -> Result<()> {
+        // Not in the index: nothing tracked yet on this branch.
+        self.git(&["show", ":.side-tracked"])
+            .map_or(Ok(()), |content| write_file(&self.tracked_file(), &content))
+    }
+}
+
+fn write_file(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| Error::CreateDir {
+            path: parent.to_path_buf(),
+            source: e,
+        })?;
+    }
+    fs::write(path, content).map_err(|e| Error::WriteFile {
+        path: path.to_path_buf(),
+        source: e,
+    })
 }
