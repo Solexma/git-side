@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Going forward, entries are maintained by [release-please](https://github.com/googleapis/release-please) from conventional commit messages.
 
+## [0.4.1](https://github.com/Solexma/git-side/compare/v0.4.0...v0.4.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* make integration tests independent of the caller's git config ([898dcf8](https://github.com/Solexma/git-side/commit/898dcf8f7a3179b1244f45e2ef33c17f4bf84f50))
+
 ## [0.4.0](https://github.com/Solexma/git-side/compare/v0.3.0...v0.4.0) (2026-10-13)
 
 This release adds **support for git worktrees** and fixes several bugs that could silently lose or corrupt side-repo data. Upgrading is recommended for everyone, especially if you use `git worktree` or tools that create worktrees for you, such as Claude Code under `.claude/worktrees/`.
