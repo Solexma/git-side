@@ -44,9 +44,17 @@ impl TrackedPaths {
         repo.write_tracked_list(&content)
     }
 
-    /// Add a path to track.
+    /// Add a path to track. Entries inside it become redundant and are
+    /// dropped.
     pub fn add(&mut self, path: &Path) -> bool {
+        self.paths.retain(|p| p == path || !p.starts_with(path));
         self.paths.insert(path.to_path_buf())
+    }
+
+    /// The tracked path that contains `path`, if any (`path` itself counts).
+    #[must_use]
+    pub fn covering(&self, path: &Path) -> Option<&PathBuf> {
+        self.paths.iter().find(|t| path.starts_with(t))
     }
 
     /// Remove a path from tracking.
