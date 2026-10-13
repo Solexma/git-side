@@ -14,7 +14,7 @@ use crate::side_repo::SideRepo;
 pub fn run() -> Result<()> {
     let repo = SideRepo::open()?;
     if !repo.has_side_repo() {
-        return Err(Error::NoTrackedPaths);
+        return Err(Error::NoSideRepo);
     }
     repo.ensure_initialized()?;
 

@@ -50,8 +50,9 @@ fn pull_restores_tracked_list_without_touching_work_tree() {
     env.side(&p, &["pull"]);
 
     assert!(!p.join(".side-tracked").exists(), "pull wrote .side-tracked into the project");
-    let list = std::fs::read_to_string(env.side_dir().join(".side-tracked")).unwrap();
-    assert_eq!(list.trim(), "a.txt");
+    let info = env.side(&p, &["info"]);
+    assert!(info.contains("- a.txt"), "{info}");
+    assert!(!info.contains("- b.txt"), "local tracked list survived the pull:\n{info}");
 }
 
 #[test]
@@ -81,4 +82,17 @@ fn legacy_side_repo_is_upgraded_on_open() {
 
     let status = env.side(&p, &["status"]);
     assert!(!status.contains(".side-tracked"), "{status}");
+}
+
+#[test]
+fn status_is_clean_with_localized_git() {
+    let env = TestEnv::new();
+    let p = env.project("p");
+    write(&p.join("a.txt"), "a");
+    env.side(&p, &["add", "a.txt"]);
+    env.side(&p, &["commit", "-m", "base"]);
+
+    let status = env.side_env(&p, &["status"], &[("LC_ALL", "it_IT.UTF-8"), ("LANG", "it_IT.UTF-8")]);
+    assert!(!status.to_lowercase().contains("sparse"), "{status}");
+    assert!(!status.contains("\n\n\n"), "{status}");
 }

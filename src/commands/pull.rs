@@ -19,7 +19,6 @@ pub fn run() -> Result<()> {
 
     // Reset to origin/main (remote wins, no conflicts)
     repo.git(&["reset", "--hard", "origin/main"])?;
-    repo.sync_tracked_file()?;
 
     println!("{}", "Pulled from remote.".green().bold());
     Ok(())

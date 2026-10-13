@@ -20,7 +20,10 @@ pub enum Error {
     #[error("'git side {0}' only works in the main worktree")]
     MainWorktreeOnly(&'static str),
 
-    #[error("no side branch for '{0}' (expected a worktree name or 'main')")]
+    #[error("no side repo for this project yet (start with 'git side add <path>')")]
+    NoSideRepo,
+
+    #[error("no side branch '{0}' (expected 'main', 'wt/<name>' or a worktree name)")]
     UnknownSideBranch(String),
 
     #[error("cannot merge '{0}' into itself")]

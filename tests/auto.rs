@@ -46,3 +46,21 @@ fn auto_picks_up_new_and_deleted_files_in_tracked_dir() {
     assert!(!tree.contains("notes/one.md"), "{tree}");
     assert!(tree.contains("notes/two.md"), "{tree}");
 }
+
+#[test]
+fn auto_records_deletion_of_non_ascii_path() {
+    let env = TestEnv::new();
+    let p = env.project("p");
+    write(&p.join("café.md"), "c");
+    write(&p.join("b.txt"), "b");
+    env.side(&p, &["add", "café.md"]);
+    env.side(&p, &["add", "b.txt"]);
+    env.side(&p, &["commit", "-m", "base"]);
+
+    fs::remove_file(p.join("café.md")).unwrap();
+    env.git(&p, &["commit", "-q", "--allow-empty", "-m", "drop"]);
+    env.side(&p, &["auto"]);
+
+    let tree = env.side_git(&["-c", "core.quotePath=false", "ls-tree", "--name-only", "HEAD"]);
+    assert!(!tree.contains("café.md"), "{tree}");
+}

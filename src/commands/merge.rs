@@ -5,7 +5,8 @@ use crate::side_repo::SideRepo;
 
 /// What `git side merge` should do.
 pub enum Action<'a> {
-    /// Merge the side branch of worktree `name` (or `main`) into this one.
+    /// Merge a side branch into the current one. `main` and `wt/<name>` are
+    /// branch names; anything else is shorthand for `wt/<name>`.
     Start(&'a str),
     /// Stage resolved conflicts and create the merge commit.
     Continue,
@@ -21,10 +22,13 @@ pub enum Action<'a> {
 /// git commands fail.
 pub fn run(action: &Action) -> Result<()> {
     let repo = SideRepo::open()?;
+    if !repo.has_side_repo() {
+        return Err(Error::NoSideRepo);
+    }
     repo.ensure_initialized()?;
 
     match action {
-        Action::Start(name) => start(&repo, name),
+        Action::Start(target) => start(&repo, target),
         Action::Continue => {
             if !repo.merge_in_progress() {
                 return Err(Error::NoMergeInProgress);
@@ -36,7 +40,6 @@ pub fn run(action: &Action) -> Result<()> {
                 repo.git(&args)?;
             }
             repo.git(&["commit", "--no-edit"])?;
-            repo.sync_tracked_file()?;
             println!("{}", "Merge completed.".green().bold());
             Ok(())
         }
@@ -45,32 +48,27 @@ pub fn run(action: &Action) -> Result<()> {
                 return Err(Error::NoMergeInProgress);
             }
             repo.git(&["merge", "--abort"])?;
-            repo.sync_tracked_file()?;
             println!("{}", "Merge aborted.".yellow().bold());
             Ok(())
         }
     }
 }
 
-fn start(repo: &SideRepo, name: &str) -> Result<()> {
-    let current = repo.worktree.as_deref().unwrap_or("main");
-    if name == current {
-        return Err(Error::MergeIntoSelf(name.to_string()));
-    }
-    let branch = if name == "main" {
-        "main".to_string()
+fn start(repo: &SideRepo, target: &str) -> Result<()> {
+    let branch = if target == "main" || target.starts_with("wt/") {
+        target.to_string()
     } else {
-        format!("wt/{name}")
+        format!("wt/{target}")
     };
+    if branch == repo.branch() {
+        return Err(Error::MergeIntoSelf(branch));
+    }
     if !repo.ref_exists(&format!("refs/heads/{branch}")) {
-        return Err(Error::UnknownSideBranch(name.to_string()));
+        return Err(Error::UnknownSideBranch(target.to_string()));
     }
 
-    let result = repo.git(&["merge", "--no-edit", "--allow-unrelated-histories", &branch]);
-    // The merged path list is in the index (merge=union never conflicts).
-    repo.sync_tracked_file()?;
-
-    match result {
+    // The tracked list merges with merge=union, so it never conflicts.
+    match repo.git(&["merge", "--no-edit", "--allow-unrelated-histories", &branch]) {
         Ok(_) => {
             println!("{} {branch}", "Merged:".green().bold());
             Ok(())

@@ -40,13 +40,10 @@ pub fn run(path: &Path) -> Result<()> {
 
     // Remove from tracked list
     tracked.remove(&relative_path);
-    tracked.save()?;
+    tracked.save(&repo)?;
 
     // Unstage from side repo
     repo.unstage(&relative_path)?;
-
-    // Stage updated .side-tracked file
-    repo.stage_tracked_file()?;
 
     println!(
         "{} {}",

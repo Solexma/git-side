@@ -62,9 +62,9 @@ enum Commands {
     /// Check out side files missing from this worktree (never overwrites)
     Checkout,
 
-    /// Merge another worktree's side branch (or `main`) into this one
+    /// Merge another side branch (`main` or a worktree's) into this one
     Merge {
-        /// Worktree name, or `main`
+        /// `main`, `wt/<name>`, or a worktree name (shorthand for `wt/<name>`)
         #[arg(required_unless_present_any = ["continue_", "abort"], conflicts_with_all = ["continue_", "abort"])]
         name: Option<String>,
 

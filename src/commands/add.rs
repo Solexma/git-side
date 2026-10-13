@@ -41,14 +41,11 @@ pub fn run(path: &Path) -> Result<()> {
     let covered = tracked.paths().iter().any(|t| relative_path.starts_with(t));
     if !covered {
         tracked.add(&relative_path);
-        tracked.save()?;
+        tracked.save(&repo)?;
     }
 
     // Stage the path
     repo.stage(&relative_path)?;
-
-    // Stage .side-tracked file itself
-    repo.stage_tracked_file()?;
 
     let label = if covered { "Staged:" } else { "Tracking:" };
     println!("{} {}", label.green().bold(), relative_path.display());

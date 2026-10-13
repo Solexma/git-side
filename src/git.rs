@@ -108,14 +108,13 @@ pub fn last_commit_message() -> Result<String> {
     run(&["log", "-1", "--format=%B"])
 }
 
-/// Name of the linked worktree we are in, or `None` in the main worktree.
-///
-/// In a linked worktree the git dir is `<common>/worktrees/<name>`.
+/// Git dir of the linked worktree we are in (`<common>/worktrees/<name>`),
+/// or `None` in the main worktree.
 ///
 /// # Errors
 ///
 /// Returns an error if not inside a git repository.
-pub fn linked_worktree_name() -> Result<Option<String>> {
+pub fn linked_worktree_dir() -> Result<Option<PathBuf>> {
     let out = run(&[
         "rev-parse",
         "--path-format=absolute",
@@ -129,7 +128,5 @@ pub fn linked_worktree_name() -> Result<Option<String>> {
     if git_dir == common_dir {
         return Ok(None);
     }
-    Ok(Path::new(git_dir)
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned()))
+    Ok(Some(PathBuf::from(git_dir)))
 }

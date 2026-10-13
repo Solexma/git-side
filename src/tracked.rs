@@ -2,12 +2,14 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::side_repo::SideRepo;
 
-/// Manages the .side-tracked file.
+/// Manages the list of tracked paths (`.side-tracked`).
+///
+/// The list lives in the side repo's index; there is no other copy to keep
+/// in sync after pull, merge or worktree setup.
 pub struct TrackedPaths {
-    file_path: PathBuf,
     paths: BTreeSet<PathBuf>,
 }
 
@@ -16,53 +18,30 @@ impl TrackedPaths {
     ///
     /// # Errors
     ///
-    /// Returns an error if the tracked file exists but cannot be read.
+    /// Returns an error if the list cannot be read.
     pub fn load(repo: &SideRepo) -> Result<Self> {
-        let file_path = repo.tracked_file();
-        let paths = if file_path.exists() {
-            let content = fs::read_to_string(&file_path).map_err(|e| Error::ReadFile {
-                path: file_path.clone(),
-                source: e,
-            })?;
-            content
-                .lines()
-                .filter(|line| !line.trim().is_empty())
-                .map(PathBuf::from)
-                .collect()
-        } else {
-            BTreeSet::new()
-        };
-
-        Ok(Self { file_path, paths })
+        let paths = repo
+            .read_tracked_list()?
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(PathBuf::from)
+            .collect();
+        Ok(Self { paths })
     }
 
-    /// Save tracked paths to disk.
+    /// Save tracked paths to the side repo's index.
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be written.
-    pub fn save(&self) -> Result<()> {
-        // Ensure parent directory exists
-        if let Some(parent) = self.file_path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent).map_err(|e| Error::CreateDir {
-                path: parent.to_path_buf(),
-                source: e,
-            })?;
-        }
-
+    /// Returns an error if the list cannot be written or staged.
+    pub fn save(&self, repo: &SideRepo) -> Result<()> {
         let content: String = self
             .paths
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .collect::<Vec<_>>()
             .join("\n");
-
-        fs::write(&self.file_path, content).map_err(|e| Error::WriteFile {
-            path: self.file_path.clone(),
-            source: e,
-        })
+        repo.write_tracked_list(&content)
     }
 
     /// Add a path to track.
@@ -93,73 +72,59 @@ impl TrackedPaths {
         &self.paths
     }
 
-    /// Expand all tracked paths to actual files on disk.
-    /// Directories are walked recursively.
+    /// Walk all tracked paths on disk.
     #[must_use]
-    pub fn expand(&self, work_tree: &Path) -> Vec<PathBuf> {
-        let mut files = Vec::new();
-
-        for path in &self.paths {
-            let full_path = work_tree.join(path);
-            if full_path.is_file() {
-                files.push(path.clone());
-            } else if full_path.is_dir() {
-                Self::walk_dir(&full_path, path, &mut files);
-            }
-            // If path doesn't exist, skip it (will be handled as deletion)
-        }
-
-        files
-    }
-
-    /// Recursively walk a directory and collect all files.
-    /// Nested repositories are skipped (see `nested_repos`).
-    fn walk_dir(dir: &Path, relative_base: &Path, files: &mut Vec<PathBuf>) {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                let relative = relative_base.join(entry.file_name());
-
-                if entry_path.is_file() {
-                    files.push(relative);
-                } else if entry_path.is_dir() && !is_repo(&entry_path) {
-                    Self::walk_dir(&entry_path, &relative, files);
-                }
-            }
-        }
+    pub fn scan(&self, work_tree: &Path) -> Scan {
+        scan(work_tree, &self.paths.iter().collect::<Vec<_>>())
     }
 }
 
-/// Find git repositories and worktrees nested inside the given directories
-/// (e.g. worktrees under `.claude/worktrees/`). They are not ours to version:
-/// `git add` would record them as gitlinks.
-#[must_use]
-pub fn nested_repos(work_tree: &Path, paths: &[&PathBuf]) -> Vec<PathBuf> {
-    fn walk(dir: &Path, relative_base: &Path, found: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let entry_path = entry.path();
-            if !entry.file_type().is_ok_and(|t| t.is_dir()) {
-                continue;
-            }
-            let relative = relative_base.join(entry.file_name());
-            if is_repo(&entry_path) {
-                found.push(relative);
-            } else {
-                walk(&entry_path, &relative, found);
-            }
-        }
-    }
+/// What a walk of tracked paths found on disk.
+#[derive(Default)]
+pub struct Scan {
+    /// Files (and symlinks) under the tracked paths.
+    pub files: Vec<PathBuf>,
+    /// Git repositories and worktrees nested inside tracked directories
+    /// (e.g. worktrees under `.claude/worktrees/`). They are not ours to
+    /// version: `git add` would record them as gitlinks.
+    pub nested_repos: Vec<PathBuf>,
+}
 
-    let mut found = Vec::new();
+/// Walk `paths` (relative to `work_tree`), recursing into directories.
+///
+/// Symlinks are not followed, matching what `git add` records. Paths
+/// missing from disk are skipped (they are handled as deletions).
+#[must_use]
+pub fn scan(work_tree: &Path, paths: &[&PathBuf]) -> Scan {
+    let mut found = Scan::default();
     for path in paths {
-        walk(&work_tree.join(path), path, &mut found);
+        let Ok(meta) = fs::symlink_metadata(work_tree.join(path)) else {
+            continue;
+        };
+        if meta.is_dir() {
+            walk(&work_tree.join(path), path, &mut found);
+        } else {
+            found.files.push((*path).clone());
+        }
     }
     found
 }
 
-fn is_repo(dir: &Path) -> bool {
-    dir.join(".git").exists()
+fn walk(dir: &Path, relative_base: &Path, found: &mut Scan) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let relative = relative_base.join(entry.file_name());
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            found.files.push(relative);
+        } else if entry.path().join(".git").exists() {
+            found.nested_repos.push(relative);
+        } else {
+            walk(&entry.path(), &relative, found);
+        }
+    }
 }
