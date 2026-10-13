@@ -114,6 +114,28 @@ fn merge_worktree_branch_into_main() {
 }
 
 #[test]
+fn unmerged_worktree_commits_are_reported_from_the_worktree() {
+    let env = TestEnv::new();
+    let (p, wt) = setup(&env);
+    env.side(&wt, &["checkout"]);
+    assert!(!env.side(&wt, &["status"]).contains("not merged"));
+
+    write(&wt.join("notes.md"), "notes");
+    env.side(&wt, &["add", "notes.md"]);
+    env.side(&wt, &["commit", "-m", "notes"]);
+
+    let status = env.side(&wt, &["status"]);
+    assert!(status.contains("wt/wt has commits not merged into main"), "{status}");
+    assert!(status.contains("git side merge wt"), "{status}");
+    let info = env.side(&wt, &["info"]);
+    assert!(info.contains("wt/wt (this worktree)"), "{info}");
+
+    env.side(&p, &["merge", "wt"]);
+    assert!(!env.side(&wt, &["status"]).contains("not merged"));
+    assert!(!env.side(&wt, &["info"]).contains("Unmerged"));
+}
+
+#[test]
 fn merge_main_into_worktree() {
     let env = TestEnv::new();
     let (p, wt) = setup(&env);
