@@ -29,8 +29,11 @@ fn checkout_materialises_side_files_in_worktree() {
     let env = TestEnv::new();
     let (p, wt) = setup(&env);
 
-    env.side(&wt, &["checkout"]);
+    let out = env.side(&wt, &["checkout"]);
 
+    // The first checkout reports what it wrote, the second has nothing to do.
+    assert!(out.contains("Checked out: CLAUDE.md"), "{out}");
+    assert!(env.side(&wt, &["checkout"]).contains("already present"));
     assert_eq!(fs::read_to_string(wt.join("CLAUDE.md")).unwrap(), "rules v1");
     assert!(wt.join(".claude/settings.json").exists());
     assert!(!wt.join(".side-tracked").exists());
