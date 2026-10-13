@@ -9,7 +9,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
-* clearer worktree checkout and unmerged-commit hints ([2b946e3](https://github.com/Solexma/git-side/commit/2b946e3f2b0691d1495e2c3b227661b1434b0c55))
 * report side files checked out while setting up a worktree ([a3b5951](https://github.com/Solexma/git-side/commit/a3b5951d84b8eae879ecf093a2127326e6e06503))
 * warn about unmerged side commits from inside the worktree ([e331a84](https://github.com/Solexma/git-side/commit/e331a842f53b7a4f76c11b9e3936bb0fa1b05798))
 
