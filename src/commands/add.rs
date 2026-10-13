@@ -11,7 +11,7 @@ use crate::tracked::TrackedPaths;
 ///
 /// # Errors
 ///
-/// Returns an error if the path doesn't exist, is already tracked, or if staging fails.
+/// Returns an error if the path doesn't exist or if staging fails.
 pub fn run(path: &Path) -> Result<()> {
     let work_tree = git::repo_root()?;
 
@@ -36,14 +36,13 @@ pub fn run(path: &Path) -> Result<()> {
     // Load tracked paths
     let mut tracked = TrackedPaths::load(&repo)?;
 
-    // Check if already tracked
-    if tracked.contains(&relative_path) {
-        return Err(Error::PathAlreadyTracked(relative_path));
+    // Like `git add`: a path that is already tracked (or inside a tracked
+    // directory) just gets its current content staged.
+    let covered = tracked.paths().iter().any(|t| relative_path.starts_with(t));
+    if !covered {
+        tracked.add(&relative_path);
+        tracked.save()?;
     }
-
-    // Add to tracked list
-    tracked.add(&relative_path);
-    tracked.save()?;
 
     // Stage the path
     repo.stage(&relative_path)?;
@@ -51,11 +50,8 @@ pub fn run(path: &Path) -> Result<()> {
     // Stage .side-tracked file itself
     repo.stage_tracked_file()?;
 
-    println!(
-        "{} {}",
-        "Tracking:".green().bold(),
-        relative_path.display()
-    );
+    let label = if covered { "Staged:" } else { "Tracking:" };
+    println!("{} {}", label.green().bold(), relative_path.display());
 
     Ok(())
 }
