@@ -14,9 +14,6 @@ pub enum Error {
     #[error("path not found: {}", .0.display())]
     PathNotFound(PathBuf),
 
-    #[error("path already tracked: {}", .0.display())]
-    PathAlreadyTracked(PathBuf),
-
     #[error("path not tracked: {}", .0.display())]
     PathNotTracked(PathBuf),
 
