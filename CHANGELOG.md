@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Going forward, entries are maintained by [release-please](https://github.com/googleapis/release-please) from conventional commit messages.
 
+## [0.4.2](https://github.com/Solexma/git-side/compare/v0.4.1...v0.4.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* report side files checked out while setting up a worktree ([a3b5951](https://github.com/Solexma/git-side/commit/a3b5951d84b8eae879ecf093a2127326e6e06503))
+* warn about unmerged side commits from inside the worktree ([e331a84](https://github.com/Solexma/git-side/commit/e331a842f53b7a4f76c11b9e3936bb0fa1b05798))
+
 ## [0.4.1](https://github.com/Solexma/git-side/compare/v0.4.0...v0.4.1) (2026-10-13)
 
 Patch release for packagers: the integration tests now pass in build environments that override git's configuration, such as makepkg (`GIT_CONFIG_GLOBAL=/dev/null`), so source-built packages like the AUR's can run `cargo test` in `check()`. No change to the `git-side` binary itself.
