@@ -61,7 +61,7 @@ impl SideRepo {
     /// Returns an error if the directory cannot be created or git init fails.
     pub fn ensure_initialized(&self) -> Result<()> {
         if self.is_initialized() {
-            return Ok(());
+            return self.ensure_main_branch();
         }
 
         // Create parent directory
@@ -72,11 +72,38 @@ impl SideRepo {
             })?;
         }
 
-        // Initialize bare repo
+        // Initialize bare repo; push/pull operate on `main`, whatever the
+        // user's init.defaultBranch says.
         let git_dir_str = self.git_dir.to_string_lossy();
-        git::run(&["init", "--bare", &git_dir_str])?;
+        git::run(&["init", "--bare", "--initial-branch=main", &git_dir_str])?;
 
         Ok(())
+    }
+
+    /// Side repos created by older versions follow `init.defaultBranch`.
+    /// Rename their branch to `main` unless a `main` branch already exists.
+    fn ensure_main_branch(&self) -> Result<()> {
+        let head = fs::read_to_string(self.git_dir.join("HEAD")).unwrap_or_default();
+        let Some(branch) = head.trim().strip_prefix("ref: refs/heads/") else {
+            return Ok(());
+        };
+        if branch == "main" || self.ref_exists("refs/heads/main") {
+            return Ok(());
+        }
+
+        if self.ref_exists(&format!("refs/heads/{branch}")) {
+            self.git(&["branch", "-m", branch, "main"])?;
+        } else {
+            // Unborn branch: just repoint HEAD.
+            self.git(&["symbolic-ref", "HEAD", "refs/heads/main"])?;
+        }
+        Ok(())
+    }
+
+    /// Check whether a ref exists in the side repo.
+    #[must_use]
+    pub fn ref_exists(&self, refname: &str) -> bool {
+        self.git(&["rev-parse", "--verify", "--quiet", refname]).is_ok()
     }
 
     /// Run a git command in the context of the side repo.
