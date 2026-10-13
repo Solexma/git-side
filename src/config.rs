@@ -130,8 +130,14 @@ pub fn paths_store(root_sha: &str, base_path: &Path) -> Result<()> {
 }
 
 /// Get the default base path for side repos.
+///
+/// The `GIT_SIDE_BASE_PATH` environment variable overrides the platform
+/// default; a per-project path set with `git side init --path` still wins.
 #[must_use]
 pub fn default_base_path() -> PathBuf {
+    if let Some(base) = std::env::var_os("GIT_SIDE_BASE_PATH").filter(|v| !v.is_empty()) {
+        return PathBuf::from(base);
+    }
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("~/.local/share"))
         .join("git-side")
