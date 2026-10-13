@@ -8,6 +8,14 @@ on:
       tag:
         description: "Release tag to upload assets to (e.g. v0.2.3)"
         required: true
+  # Called by release-please.yml: releases it creates with GITHUB_TOKEN do
+  # not trigger the `release` event above.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build and upload assets to"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -34,6 +42,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Build the released tag, not the branch the workflow ran from.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Install Rust toolchain
         run: |
