@@ -17,6 +17,20 @@ fn status_does_not_report_side_tracked_as_deleted() {
 }
 
 #[test]
+fn status_hides_main_project_files() {
+    let env = TestEnv::new();
+    let p = env.project("p");
+    write(&p.join("src/main.rs"), "fn main() {}");
+    write(&p.join("a.txt"), "a");
+    env.side(&p, &["add", "a.txt"]);
+    env.side(&p, &["commit", "-m", "base"]);
+
+    let status = env.side(&p, &["status"]);
+    assert!(!status.contains("src/"), "{status}");
+    assert!(!status.contains("Untracked"), "{status}");
+}
+
+#[test]
 fn pull_restores_tracked_list_without_touching_work_tree() {
     let env = TestEnv::new();
     let p = env.project("p");

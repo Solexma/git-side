@@ -65,7 +65,7 @@ impl SideRepo {
             repo.ensure_main_branch()?;
         }
         if repo.is_initialized() {
-            repo.ensure_sparse_checkout()?;
+            repo.ensure_config()?;
             repo.write_worktree_gitdir()?;
         }
         Ok(repo)
@@ -110,7 +110,7 @@ impl SideRepo {
         }
 
         let Some(name) = &self.worktree else {
-            return self.ensure_sparse_checkout();
+            return self.ensure_config();
         };
         // A half-initialized worktree (HEAD written, index not populated)
         // would make the next auto record every side file as deleted.
@@ -146,7 +146,7 @@ impl SideRepo {
         write_file(&self.git_dir.join("commondir"), "../..\n")?;
         self.write_worktree_gitdir()?;
         write_file(&self.git_dir.join("HEAD"), &format!("ref: {branch}\n"))?;
-        self.ensure_sparse_checkout()?;
+        self.ensure_config()?;
 
         if self.git(&["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok() {
             self.git(&["read-tree", "HEAD"])?;
@@ -198,19 +198,24 @@ impl SideRepo {
         Ok(files)
     }
 
-    /// Keep `.side-tracked` out of the work-tree.
+    /// One-time configuration of the side repo (and of each worktree).
     ///
-    /// The file is versioned in the side repo but lives in its git dir. A
-    /// non-cone sparse checkout excluding it stops git from writing it into
-    /// the project on `reset --hard`/`merge` and from reporting it as deleted.
-    /// `merge=union` lets path lists from different branches merge cleanly.
-    fn ensure_sparse_checkout(&self) -> Result<()> {
+    /// Untracked files are hidden: from the side repo's point of view the
+    /// whole project is untracked.
+    ///
+    /// `.side-tracked` is versioned in the side repo but lives in its git
+    /// dir. A non-cone sparse checkout excluding it stops git from writing it
+    /// into the project on `reset --hard`/`merge` and from reporting it as
+    /// deleted. `merge=union` lets path lists from different branches merge
+    /// cleanly.
+    fn ensure_config(&self) -> Result<()> {
         // Per worktree: lives in the admin dir for linked worktrees.
         let sparse_file = self.git_dir.join("info").join("sparse-checkout");
         if sparse_file.exists() {
             return Ok(());
         }
 
+        self.git(&["config", "status.showUntrackedFiles", "no"])?;
         self.git(&["config", "core.sparseCheckout", "true"])?;
         self.git(&["config", "core.sparseCheckoutCone", "false"])?;
         write_file(&sparse_file, "/*\n!/.side-tracked\n")?;
