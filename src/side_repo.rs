@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::config::{self, hash_path};
 use crate::error::{Error, Result};
 use crate::git;
+use crate::tracked;
 
 /// Represents a side repository for a project.
 pub struct SideRepo {
@@ -128,9 +129,8 @@ impl SideRepo {
     /// Returns an error if initialization or staging fails.
     pub fn stage(&self, path: &Path) -> Result<()> {
         self.ensure_initialized()?;
-        let path_str = path.to_string_lossy();
-        self.git(&["add", "-f", &path_str])?;
-        Ok(())
+        let path = path.to_path_buf();
+        self.add(&["-f"], &[&path])
     }
 
     /// Stage paths with update flag (handles modifications and deletions).
@@ -153,12 +153,16 @@ impl SideRepo {
             return Ok(());
         }
 
-        let path_strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-        let mut args: Vec<&str> = vec!["add", "-f", "-u", "--"];
-        args.extend(path_strs.iter().map(String::as_str));
+        // Drop gitlinks recorded for nested repos by older versions.
+        let nested = tracked::nested_repos(&self.work_tree, &paths);
+        if !nested.is_empty() {
+            let nested_strs: Vec<String> = nested.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+            let mut args = vec!["rm", "--cached", "-r", "-q", "--ignore-unmatch", "--"];
+            args.extend(nested_strs.iter().map(String::as_str));
+            self.git(&args)?;
+        }
 
-        self.git(&args)?;
-        Ok(())
+        self.add(&["-f", "-u"], &paths)
     }
 
     /// Stage paths (adds new files). Paths missing from disk are skipped;
@@ -176,10 +180,23 @@ impl SideRepo {
             return Ok(());
         }
         self.ensure_initialized()?;
+        self.add(&["-f"], &paths)
+    }
 
-        let path_strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-        let mut args: Vec<&str> = vec!["add", "-f", "--"];
-        args.extend(path_strs.iter().map(String::as_str));
+    /// Run `git add <flags> -- <paths>`, excluding repositories nested
+    /// inside the paths so they are never recorded as gitlinks.
+    fn add(&self, flags: &[&str], paths: &[&PathBuf]) -> Result<()> {
+        let mut pathspecs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        pathspecs.extend(
+            tracked::nested_repos(&self.work_tree, paths)
+                .iter()
+                .map(|p| format!(":(exclude){}", p.to_string_lossy())),
+        );
+
+        let mut args = vec!["add"];
+        args.extend_from_slice(flags);
+        args.push("--");
+        args.extend(pathspecs.iter().map(String::as_str));
 
         self.git(&args)?;
         Ok(())
