@@ -107,29 +107,44 @@ impl SideRepo {
     }
 
     /// Stage paths with update flag (handles modifications and deletions).
-    /// Errors are ignored since paths may not be in the index yet.
-    pub fn stage_update(&self, paths: &[PathBuf]) {
+    ///
+    /// Only paths with entries in the index are passed: a pathspec that
+    /// matches nothing makes git abort the whole command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if initialization or staging fails.
+    pub fn stage_update(&self, paths: &[PathBuf]) -> Result<()> {
+        self.ensure_initialized()?;
+
+        let indexed = self.git(&["ls-files", "--cached"])?;
+        let paths: Vec<&PathBuf> = paths
+            .iter()
+            .filter(|p| indexed.lines().any(|entry| Path::new(entry).starts_with(p)))
+            .collect();
         if paths.is_empty() {
-            return;
-        }
-        if self.ensure_initialized().is_err() {
-            return;
+            return Ok(());
         }
 
         let path_strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         let mut args: Vec<&str> = vec!["add", "-f", "-u", "--"];
         args.extend(path_strs.iter().map(String::as_str));
 
-        // Ignore errors — paths may not be in the index yet
-        let _ = self.git(&args);
+        self.git(&args)?;
+        Ok(())
     }
 
-    /// Stage paths (adds new files).
+    /// Stage paths (adds new files). Paths missing from disk are skipped;
+    /// their deletion is handled by `stage_update`.
     ///
     /// # Errors
     ///
     /// Returns an error if initialization or staging fails.
     pub fn stage_new(&self, paths: &[PathBuf]) -> Result<()> {
+        let paths: Vec<&PathBuf> = paths
+            .iter()
+            .filter(|p| self.work_tree.join(p).exists())
+            .collect();
         if paths.is_empty() {
             return Ok(());
         }
