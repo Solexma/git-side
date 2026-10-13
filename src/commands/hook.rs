@@ -17,8 +17,7 @@ git side auto
 
 /// Get the path to a git hook.
 fn hook_path(hook_name: &str) -> Result<PathBuf> {
-    let git_dir = git::git_dir()?;
-    Ok(git_dir.join("hooks").join(hook_name))
+    Ok(git::hooks_dir()?.join(hook_name))
 }
 
 /// Check if our hook is already installed.
