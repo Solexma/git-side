@@ -151,7 +151,7 @@ git side log                           # show side repo history
 git side ls-files [<args>]             # list files in side repo (pass-through to git ls-files)
 git side auto                          # sync, commit, and push (if remote exists) using last main repo message
 git side checkout                      # check out side files missing from this worktree (never overwrites)
-git side merge <worktree|main>         # merge side changes between worktrees (--continue / --abort)
+git side merge <main|wt/<name>|name>   # merge side changes between worktrees (--continue / --abort)
 git side init --path <dir>             # set custom base path for this project's side repo
 git side hook install [--on <hook>]    # install git hook to run auto (default: post-commit)
 git side hook uninstall [--on <hook>]  # remove git hook
@@ -217,7 +217,7 @@ git side commit -m "plan"
 
 cd ../project
 git side info                  # lists unmerged worktree branches
-git side merge feature         # bring the worktree's side changes into main
+git side merge feature         # bring the worktree's side changes into main (same as wt/feature)
 ```
 
 - The first `git side` command in a new worktree checks out the side files it is missing. Existing files are never overwritten.
