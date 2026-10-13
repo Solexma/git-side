@@ -113,6 +113,7 @@ impl TrackedPaths {
     }
 
     /// Recursively walk a directory and collect all files.
+    /// Nested repositories are skipped (see `nested_repos`).
     fn walk_dir(dir: &Path, relative_base: &Path, files: &mut Vec<PathBuf>) {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -121,10 +122,44 @@ impl TrackedPaths {
 
                 if entry_path.is_file() {
                     files.push(relative);
-                } else if entry_path.is_dir() {
+                } else if entry_path.is_dir() && !is_repo(&entry_path) {
                     Self::walk_dir(&entry_path, &relative, files);
                 }
             }
         }
     }
+}
+
+/// Find git repositories and worktrees nested inside the given directories
+/// (e.g. worktrees under `.claude/worktrees/`). They are not ours to version:
+/// `git add` would record them as gitlinks.
+#[must_use]
+pub fn nested_repos(work_tree: &Path, paths: &[&PathBuf]) -> Vec<PathBuf> {
+    fn walk(dir: &Path, relative_base: &Path, found: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+                continue;
+            }
+            let relative = relative_base.join(entry.file_name());
+            if is_repo(&entry_path) {
+                found.push(relative);
+            } else {
+                walk(&entry_path, &relative, found);
+            }
+        }
+    }
+
+    let mut found = Vec::new();
+    for path in paths {
+        walk(&work_tree.join(path), path, &mut found);
+    }
+    found
+}
+
+fn is_repo(dir: &Path) -> bool {
+    dir.join(".git").exists()
 }
