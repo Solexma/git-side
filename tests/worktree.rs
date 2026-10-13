@@ -278,3 +278,48 @@ fn failed_worktree_setup_leaves_no_half_initialized_state() {
     env.side(&wt, &["checkout"]);
     assert!(wt.join("CLAUDE.md").is_file());
 }
+
+#[test]
+fn recreated_worktree_without_prune_does_not_delete_side_files() {
+    let env = TestEnv::new();
+    let (p, wt) = setup(&env);
+    env.side(&wt, &["checkout"]);
+
+    // No prune in between: the side state of the old worktree is still there.
+    env.git(&p, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    env.git(&p, &["worktree", "add", "-q", "-f", wt.to_str().unwrap()]);
+    env.git(&wt, &["commit", "-q", "--allow-empty", "-m", "new wt"]);
+    env.side(&wt, &["auto"]);
+
+    let wt_tree = env.side_git(&["ls-tree", "-r", "--name-only", "wt/wt"]);
+    assert!(wt_tree.contains("CLAUDE.md"), "{wt_tree}");
+    assert!(wt.join("CLAUDE.md").exists());
+}
+
+#[test]
+fn worktree_named_main_and_branch_names_from_info() {
+    let env = TestEnv::new();
+    let (p, _wt) = setup(&env);
+    let main_wt = env.root.join("main");
+    env.git(&p, &["worktree", "add", "-q", main_wt.to_str().unwrap()]);
+    write(&main_wt.join("idea.md"), "idea");
+    env.side(&main_wt, &["add", "idea.md"]);
+    env.side(&main_wt, &["commit", "-m", "idea"]);
+
+    // Inside worktree "main", merging the side branch `main` is not a self-merge.
+    env.side(&main_wt, &["merge", "main"]);
+
+    // The name printed by info works as-is.
+    let info = env.side(&p, &["info"]);
+    assert!(info.contains("wt/main"), "{info}");
+    env.side(&p, &["merge", "wt/main"]);
+    assert!(p.join("idea.md").exists());
+}
+
+#[test]
+fn merge_without_side_repo_creates_nothing() {
+    let env = TestEnv::new();
+    let p = env.project("p");
+    assert!(!env.side_raw(&p, &["merge", "x"]).status.success());
+    assert!(!env.root.join("home/.local/share/git-side").exists());
+}

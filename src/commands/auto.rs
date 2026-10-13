@@ -36,21 +36,19 @@ pub fn run() -> Result<()> {
         return Err(Error::NoTrackedPaths);
     }
 
-    // Expand directories to files
-    let files = tracked.expand(&repo.work_tree);
+    // One walk: files on disk (for the summary) and nested repos to exclude
+    let scan = tracked.scan(&repo.work_tree);
+    let files = scan.files;
 
     // Get the raw tracked paths for staging (we stage the tracked paths, not expanded files)
     let tracked_paths: Vec<_> = tracked.paths().iter().cloned().collect();
 
-    // Two-pass staging:
+    // Two-pass staging (the tracked list itself is already in the index):
     // Pass 1: update tracked files (modifications + deletions)
-    repo.stage_update(&tracked_paths)?;
+    repo.stage_update(&tracked_paths, &scan.nested_repos)?;
 
     // Pass 2: add new files
-    repo.stage_new(&tracked_paths)?;
-
-    // Stage .side-tracked file itself (self-aware versioning)
-    repo.stage_tracked_file()?;
+    repo.stage_new(&tracked_paths, &scan.nested_repos)?;
 
     // Get last commit message from main repo
     let message = git::last_commit_message()?;

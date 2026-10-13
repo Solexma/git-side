@@ -69,6 +69,17 @@ impl TestEnv {
         cmd.output().unwrap()
     }
 
+    /// Run `git-side` in `dir` with extra environment variables.
+    pub fn side_env(&self, dir: &Path, args: &[&str], vars: &[(&str, &str)]) -> String {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_git-side"));
+        cmd.current_dir(dir).args(args);
+        self.apply_env(&mut cmd);
+        cmd.envs(vars.iter().copied());
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
     /// Run `git-side` in `dir`, panicking on failure; returns stdout.
     pub fn side(&self, dir: &Path, args: &[&str]) -> String {
         let out = self.side_raw(dir, args);

@@ -1,16 +1,20 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use crate::config::{self, hash_path};
 use crate::error::{Error, Result};
 use crate::git;
 use crate::tracked;
 
+/// Name of the tracked-paths list, versioned at the root of the side repo.
+const TRACKED_LIST: &str = ".side-tracked";
+
 /// Represents a side repository for a project.
 ///
-/// Linked worktrees of the project get their own `HEAD`, index and
-/// `.side-tracked` inside the side repo, using git's own layout:
-/// `<common_dir>/worktrees/<name>/`, on branch `wt/<name>`.
+/// Linked worktrees of the project get their own `HEAD` and index inside the
+/// side repo, using git's own layout: `<common_dir>/worktrees/<name>/`, on
+/// branch `wt/<name>`.
 pub struct SideRepo {
     /// Git dir used for commands: `common_dir`, or the per-worktree admin dir.
     pub git_dir: PathBuf,
@@ -22,6 +26,8 @@ pub struct SideRepo {
     pub root_sha: String,
     /// Name of the linked worktree, `None` in the main worktree.
     pub worktree: Option<String>,
+    /// Identifies this instance of the linked worktree (see `worktree_instance`).
+    instance: String,
 }
 
 impl SideRepo {
@@ -49,8 +55,12 @@ impl SideRepo {
             .unwrap_or_else(config::default_base_path);
 
         let common_dir = base_path.join(&root_sha);
-        let linked = git::linked_worktree_name()?;
-        let git_dir = linked
+        let linked = git::linked_worktree_dir()?;
+        let name = linked
+            .as_ref()
+            .and_then(|dir| dir.file_name())
+            .map(|name| name.to_string_lossy().into_owned());
+        let git_dir = name
             .as_ref()
             .map_or_else(|| common_dir.clone(), |name| common_dir.join("worktrees").join(name));
 
@@ -59,11 +69,13 @@ impl SideRepo {
             common_dir,
             work_tree,
             root_sha,
-            worktree: linked,
+            worktree: name,
+            instance: linked.as_deref().map(worktree_instance).unwrap_or_default(),
         };
         if repo.has_side_repo() {
             repo.ensure_main_branch()?;
         }
+        repo.discard_stale_worktree_state()?;
         if repo.is_initialized() {
             repo.ensure_config()?;
             repo.write_worktree_gitdir()?;
@@ -95,12 +107,8 @@ impl SideRepo {
         }
 
         if !self.has_side_repo() {
-            // Create parent directory
             if let Some(parent) = self.common_dir.parent() {
-                fs::create_dir_all(parent).map_err(|e| Error::CreateDir {
-                    path: parent.to_path_buf(),
-                    source: e,
-                })?;
+                create_dir(parent)?;
             }
 
             // Initialize bare repo; push/pull operate on `main`, whatever the
@@ -144,19 +152,35 @@ impl SideRepo {
         }
 
         write_file(&self.git_dir.join("commondir"), "../..\n")?;
+        write_file(&self.git_dir.join("instance"), &self.instance)?;
         self.write_worktree_gitdir()?;
         write_file(&self.git_dir.join("HEAD"), &format!("ref: {branch}\n"))?;
         self.ensure_config()?;
 
         if self.git(&["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok() {
             self.git(&["read-tree", "HEAD"])?;
-            if !self.git(&["ls-files", "--cached", "--", ".side-tracked"])?.is_empty() {
-                self.git(&["update-index", "--skip-worktree", ".side-tracked"])?;
-            }
-            self.sync_tracked_file()?;
+            self.hide_tracked_list()?;
             self.materialize()?;
         }
         Ok(())
+    }
+
+    /// A worktree removed and re-added under the same name finds the old
+    /// side state still there (git only prunes it after a while). That state
+    /// describes files the new worktree never had: drop it so the next
+    /// command sets the worktree up from scratch. The side branch is kept.
+    fn discard_stale_worktree_state(&self) -> Result<()> {
+        if self.worktree.is_none() || !self.is_initialized() {
+            return Ok(());
+        }
+        let recorded = fs::read_to_string(self.git_dir.join("instance")).unwrap_or_default();
+        if recorded == self.instance {
+            return Ok(());
+        }
+        fs::remove_dir_all(&self.git_dir).map_err(|e| Error::WriteFile {
+            path: self.git_dir.clone(),
+            source: e,
+        })
     }
 
     /// Point the side worktree's `gitdir` at the project worktree's `.git`
@@ -181,12 +205,9 @@ impl SideRepo {
     ///
     /// Returns an error if the git commands fail.
     pub fn materialize(&self) -> Result<Vec<String>> {
+        // Skip-worktree entries (the tracked list) are never reported here.
         let missing = self.git(&["ls-files", "-z", "--deleted"])?;
-        let files: Vec<String> = missing
-            .split('\0')
-            .filter(|f| !f.is_empty() && *f != ".side-tracked")
-            .map(str::to_string)
-            .collect();
+        let files: Vec<String> = split_z(&missing);
         if !files.is_empty() {
             let mut args = vec!["checkout-index", "--"];
             args.extend(files.iter().map(String::as_str));
@@ -203,11 +224,11 @@ impl SideRepo {
     /// Untracked files are hidden: from the side repo's point of view the
     /// whole project is untracked.
     ///
-    /// `.side-tracked` is versioned in the side repo but lives in its git
-    /// dir. A non-cone sparse checkout excluding it stops git from writing it
-    /// into the project on `reset --hard`/`merge` and from reporting it as
-    /// deleted. `merge=union` lets path lists from different branches merge
-    /// cleanly.
+    /// The tracked list is versioned but must never appear in the project
+    /// work-tree. A non-cone sparse checkout excluding it stops `reset
+    /// --hard`/`merge` from writing it there, and the `skip-worktree` bit
+    /// keeps it from being reported as deleted. `merge=union` lets lists
+    /// from different branches merge cleanly.
     fn ensure_config(&self) -> Result<()> {
         // Per worktree: lives in the admin dir for linked worktrees.
         let sparse_file = self.git_dir.join("info").join("sparse-checkout");
@@ -218,18 +239,23 @@ impl SideRepo {
         self.git(&["config", "status.showUntrackedFiles", "no"])?;
         self.git(&["config", "core.sparseCheckout", "true"])?;
         self.git(&["config", "core.sparseCheckoutCone", "false"])?;
-        write_file(&sparse_file, "/*\n!/.side-tracked\n")?;
+        write_file(&sparse_file, &format!("/*\n!/{TRACKED_LIST}\n"))?;
 
         let attributes = self.common_dir.join("info").join("attributes");
         let existing = fs::read_to_string(&attributes).unwrap_or_default();
-        if !existing.contains(".side-tracked") {
-            write_file(&attributes, &format!("{existing}.side-tracked merge=union\n"))?;
+        if !existing.contains(TRACKED_LIST) {
+            write_file(&attributes, &format!("{existing}{TRACKED_LIST} merge=union\n"))?;
         }
 
-        if self.git(&["ls-files", "--cached", "--", ".side-tracked"])?.is_empty() {
+        self.hide_tracked_list()
+    }
+
+    /// Set `skip-worktree` on the tracked list's index entry, if present.
+    fn hide_tracked_list(&self) -> Result<()> {
+        if self.git(&["ls-files", "--cached", "--", TRACKED_LIST])?.is_empty() {
             return Ok(());
         }
-        self.git(&["update-index", "--skip-worktree", ".side-tracked"])?;
+        self.git(&["update-index", "--skip-worktree", TRACKED_LIST])?;
         Ok(())
     }
 
@@ -251,6 +277,14 @@ impl SideRepo {
             self.git_common(&["symbolic-ref", "HEAD", "refs/heads/main"])?;
         }
         Ok(())
+    }
+
+    /// The side branch this worktree commits to: `main` or `wt/<name>`.
+    #[must_use]
+    pub fn branch(&self) -> String {
+        self.worktree
+            .as_ref()
+            .map_or_else(|| "main".to_string(), |name| format!("wt/{name}"))
     }
 
     /// Check whether a ref exists in the shared side repo.
@@ -305,12 +339,6 @@ impl SideRepo {
         git::run_with_paths(&self.common_dir, &self.work_tree, args)
     }
 
-    /// Get the path to the .side-tracked file.
-    #[must_use]
-    pub fn tracked_file(&self) -> PathBuf {
-        self.git_dir.join(".side-tracked")
-    }
-
     /// Stage a path (forced, bypassing gitignore).
     ///
     /// # Errors
@@ -319,48 +347,49 @@ impl SideRepo {
     pub fn stage(&self, path: &Path) -> Result<()> {
         self.ensure_initialized()?;
         let path = path.to_path_buf();
-        self.add(&["-f"], &[&path])
+        let nested = tracked::scan(&self.work_tree, &[&path]).nested_repos;
+        self.add(&["-f"], &[&path], &nested)
     }
 
     /// Stage paths with update flag (handles modifications and deletions).
     ///
     /// Only paths with entries in the index are passed: a pathspec that
-    /// matches nothing makes git abort the whole command.
+    /// matches nothing makes git abort the whole command. `nested_repos`
+    /// are excluded, and dropped from the index if older versions recorded
+    /// them as gitlinks.
     ///
     /// # Errors
     ///
     /// Returns an error if initialization or staging fails.
-    pub fn stage_update(&self, paths: &[PathBuf]) -> Result<()> {
+    pub fn stage_update(&self, paths: &[PathBuf], nested_repos: &[PathBuf]) -> Result<()> {
         self.ensure_initialized()?;
 
-        let indexed = self.git(&["ls-files", "--cached"])?;
+        let indexed = split_z(&self.git(&["ls-files", "-z", "--cached"])?);
         let paths: Vec<&PathBuf> = paths
             .iter()
-            .filter(|p| indexed.lines().any(|entry| Path::new(entry).starts_with(p)))
+            .filter(|p| indexed.iter().any(|entry| Path::new(entry).starts_with(p)))
             .collect();
         if paths.is_empty() {
             return Ok(());
         }
 
-        // Drop gitlinks recorded for nested repos by older versions.
-        let nested = tracked::nested_repos(&self.work_tree, &paths);
-        if !nested.is_empty() {
-            let nested_strs: Vec<String> = nested.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        if !nested_repos.is_empty() {
+            let nested_strs: Vec<String> = nested_repos.iter().map(|p| p.to_string_lossy().into_owned()).collect();
             let mut args = vec!["rm", "--cached", "-r", "-q", "--ignore-unmatch", "--"];
             args.extend(nested_strs.iter().map(String::as_str));
             self.git(&args)?;
         }
 
-        self.add(&["-f", "-u"], &paths)
+        self.add(&["-f", "-u"], &paths, nested_repos)
     }
 
-    /// Stage paths (adds new files). Paths missing from disk are skipped;
-    /// their deletion is handled by `stage_update`.
+    /// Stage paths (adds new files), excluding `nested_repos`. Paths missing
+    /// from disk are skipped; their deletion is handled by `stage_update`.
     ///
     /// # Errors
     ///
     /// Returns an error if initialization or staging fails.
-    pub fn stage_new(&self, paths: &[PathBuf]) -> Result<()> {
+    pub fn stage_new(&self, paths: &[PathBuf], nested_repos: &[PathBuf]) -> Result<()> {
         let paths: Vec<&PathBuf> = paths
             .iter()
             .filter(|p| self.work_tree.join(p).exists())
@@ -369,15 +398,15 @@ impl SideRepo {
             return Ok(());
         }
         self.ensure_initialized()?;
-        self.add(&["-f"], &paths)
+        self.add(&["-f"], &paths, nested_repos)
     }
 
-    /// Run `git add <flags> -- <paths>`, excluding repositories nested
-    /// inside the paths so they are never recorded as gitlinks.
-    fn add(&self, flags: &[&str], paths: &[&PathBuf]) -> Result<()> {
+    /// Run `git add <flags> -- <paths>`, excluding nested repositories so
+    /// they are never recorded as gitlinks.
+    fn add(&self, flags: &[&str], paths: &[&PathBuf], nested_repos: &[PathBuf]) -> Result<()> {
         let mut pathspecs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         pathspecs.extend(
-            tracked::nested_repos(&self.work_tree, paths)
+            nested_repos
                 .iter()
                 .map(|p| format!(":(exclude){}", p.to_string_lossy())),
         );
@@ -424,13 +453,10 @@ impl SideRepo {
             }
             return Ok(String::from("Side repo not initialized. Use 'git side add <path>' to start tracking files."));
         }
-        let output = self.git(&["status"])?;
-        // Implementation detail of how .side-tracked is kept out of the work-tree.
-        Ok(output
-            .lines()
-            .filter(|line| !line.starts_with("You are in a sparse checkout"))
-            .collect::<Vec<_>>()
-            .join("\n"))
+        // Sparse checkout only exists to keep the tracked list out of the
+        // work-tree; without it status skips the "sparse checkout" notice,
+        // and the skip-worktree bit still hides the list.
+        self.git(&["-c", "core.sparseCheckout=false", "status"])
     }
 
     /// Get log output.
@@ -490,50 +516,79 @@ impl SideRepo {
         self.git(&ls_args)
     }
 
-    /// Stage the .side-tracked file using git plumbing.
-    /// Since `.side-tracked` lives in `git_dir` (not `work_tree`), we use `hash-object` + `update-index`.
+    /// Read the tracked list from the index (its only source of truth).
+    ///
+    /// Side repos from older versions may hold a list that was never staged
+    /// in `<git_dir>/.side-tracked`; that file is used as a fallback.
     ///
     /// # Errors
     ///
-    /// Returns an error if the file doesn't exist or git commands fail.
-    pub fn stage_tracked_file(&self) -> Result<()> {
-        let tracked_file = self.tracked_file();
-        if !tracked_file.exists() {
-            return Ok(());
+    /// Returns an error if the fallback file exists but cannot be read.
+    pub fn read_tracked_list(&self) -> Result<String> {
+        if !self.is_initialized() {
+            return Ok(String::new());
         }
-
-        // Hash the file and write to object store
-        let tracked_path_str = tracked_file.to_string_lossy();
-        let sha = self.git(&["hash-object", "-w", &tracked_path_str])?;
-        let sha = sha.trim();
-
-        // Add to index with name .side-tracked at repo root, never checked out
-        let cacheinfo = format!("100644,{sha},.side-tracked");
-        self.git(&["update-index", "--add", "--cacheinfo", &cacheinfo])?;
-        self.git(&["update-index", "--skip-worktree", ".side-tracked"])?;
-
-        Ok(())
+        if let Ok(content) = self.git(&["show", &format!(":{TRACKED_LIST}")]) {
+            return Ok(content);
+        }
+        let legacy = self.git_dir.join(TRACKED_LIST);
+        if !legacy.exists() {
+            return Ok(String::new());
+        }
+        fs::read_to_string(&legacy).map_err(|e| Error::ReadFile { path: legacy, source: e })
     }
 
-    /// Write the index version of `.side-tracked` back to the git dir.
-    /// Needed after anything that rewrites the index from a tree (pull, merge).
+    /// Write the tracked list into the index, never checked out.
+    ///
+    /// The list is written to `<git_dir>/.side-tracked` first, only as input
+    /// for `hash-object` (and for older versions that still read it).
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be written.
-    pub fn sync_tracked_file(&self) -> Result<()> {
-        // Not in the index: nothing tracked yet on this branch.
-        self.git(&["show", ":.side-tracked"])
-            .map_or(Ok(()), |content| write_file(&self.tracked_file(), &content))
+    /// Returns an error if the file cannot be written or git commands fail.
+    pub fn write_tracked_list(&self, content: &str) -> Result<()> {
+        self.ensure_initialized()?;
+        let file = self.git_dir.join(TRACKED_LIST);
+        write_file(&file, content)?;
+
+        let sha = self.git(&["hash-object", "-w", &file.to_string_lossy()])?;
+        let cacheinfo = format!("100644,{},{TRACKED_LIST}", sha.trim());
+        self.git(&["update-index", "--add", "--cacheinfo", &cacheinfo])?;
+        self.hide_tracked_list()
     }
+}
+
+/// Identifies one instance of a linked worktree: the mtime of the
+/// `commondir` file git writes once in `.git/worktrees/<name>/` on
+/// `git worktree add`. Re-adding a worktree under the same name changes it.
+fn worktree_instance(project_git_dir: &Path) -> String {
+    fs::metadata(project_git_dir.join("commondir"))
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|age| age.as_nanos().to_string())
+        .unwrap_or_default()
+}
+
+/// Split NUL-separated git output (`-z`), which is never quoted.
+fn split_z(output: &str) -> Vec<String> {
+    output
+        .split('\0')
+        .filter(|entry| !entry.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn create_dir(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).map_err(|e| Error::CreateDir {
+        path: path.to_path_buf(),
+        source: e,
+    })
 }
 
 fn write_file(path: &Path, content: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| Error::CreateDir {
-            path: parent.to_path_buf(),
-            source: e,
-        })?;
+        create_dir(parent)?;
     }
     fs::write(path, content).map_err(|e| Error::WriteFile {
         path: path.to_path_buf(),

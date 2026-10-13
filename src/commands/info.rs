@@ -31,7 +31,7 @@ pub fn run() -> Result<()> {
         println!("  Root SHA: {}", repo.root_sha);
         println!("  Side repo: {}", repo.common_dir.display());
         if let Some(name) = &repo.worktree {
-            println!("  Worktree: {name} (side branch wt/{name})");
+            println!("  Worktree: {name} (side branch {})", repo.branch());
         }
         println!("  Initialized: {}", if repo.is_initialized() { "yes".green() } else { "no".yellow() });
 
@@ -52,7 +52,7 @@ pub fn run() -> Result<()> {
         if repo.worktree.is_none() {
             let unmerged = repo.unmerged_worktree_branches();
             if !unmerged.is_empty() {
-                println!("  Unmerged worktree branches (git side merge <name>):");
+                println!("  Unmerged worktree branches (git side merge <branch>):");
                 for branch in unmerged {
                     println!("    - {}", branch.yellow());
                 }
