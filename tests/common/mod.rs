@@ -53,6 +53,9 @@ impl TestEnv {
             "GIT_AUTHOR_EMAIL",
             "GIT_COMMITTER_NAME",
             "GIT_COMMITTER_EMAIL",
+            // git-side's own overrides must not redirect test side repos
+            // into the caller's real storage.
+            "GIT_SIDE_BASE_PATH",
         ] {
             cmd.env_remove(var);
         }
