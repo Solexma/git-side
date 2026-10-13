@@ -14,6 +14,12 @@ pub enum Error {
     #[error("path not found: {}", .0.display())]
     PathNotFound(PathBuf),
 
+    #[error("path is outside the repository: {}", .0.display())]
+    PathOutsideRepo(PathBuf),
+
+    #[error("refusing to track the whole repository")]
+    PathIsRepoRoot,
+
     #[error("path not tracked: {}", .0.display())]
     PathNotTracked(PathBuf),
 

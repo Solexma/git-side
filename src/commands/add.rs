@@ -15,13 +15,7 @@ use crate::tracked::TrackedPaths;
 pub fn run(path: &Path) -> Result<()> {
     let work_tree = git::repo_root()?;
 
-    // Normalize path: make it relative to work tree
-    let relative_path = if path.is_absolute() {
-        path.strip_prefix(&work_tree)
-            .map_or_else(|_| path.to_path_buf(), Path::to_path_buf)
-    } else {
-        path.to_path_buf()
-    };
+    let relative_path = git::repo_relative(path)?;
 
     // Check if path exists
     let full_path = work_tree.join(&relative_path);
@@ -38,7 +32,7 @@ pub fn run(path: &Path) -> Result<()> {
 
     // Like `git add`: a path that is already tracked (or inside a tracked
     // directory) just gets its current content staged.
-    let covered = tracked.paths().iter().any(|t| relative_path.starts_with(t));
+    let covered = tracked.covering(&relative_path).is_some();
     if !covered {
         tracked.add(&relative_path);
         tracked.save(&repo)?;

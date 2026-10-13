@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{Error, Result};
@@ -129,4 +129,55 @@ pub fn linked_worktree_dir() -> Result<Option<PathBuf>> {
         return Ok(None);
     }
     Ok(Some(PathBuf::from(git_dir)))
+}
+
+/// Resolve a user-supplied path (relative to the current directory, or
+/// absolute) to a path relative to the repository root, the form used in
+/// the tracked list. `.` and `..` are resolved lexically.
+///
+/// # Errors
+///
+/// Returns an error if not inside a git repository, or if the path is
+/// outside the repository or is the repository root itself.
+pub fn repo_relative(path: &Path) -> Result<PathBuf> {
+    let root = repo_root()?;
+    let joined = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        // Relative to the root via the prefix, so a symlinked cwd still matches.
+        root.join(run(&["rev-parse", "--show-prefix"])?).join(path)
+    };
+
+    let normalized = normalize(&joined);
+    let relative = normalized
+        .strip_prefix(&root)
+        .map(Path::to_path_buf)
+        .or_else(|_| {
+            // An absolute path reaching the repo through a symlink.
+            normalized
+                .canonicalize()
+                .ok()
+                .and_then(|canonical| canonical.strip_prefix(&root).ok().map(Path::to_path_buf))
+                .ok_or_else(|| Error::PathOutsideRepo(path.to_path_buf()))
+        })?;
+
+    if relative.as_os_str().is_empty() {
+        return Err(Error::PathIsRepoRoot);
+    }
+    Ok(relative)
+}
+
+/// Resolve `.` and `..` components without touching the filesystem.
+fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }

@@ -117,6 +117,21 @@ impl TestEnv {
         self.git(&self.root, &full)
     }
 
+    /// Overwrite the tracked list in the side index, bypassing git-side
+    /// (to recreate states written by older versions).
+    pub fn set_tracked_list(&self, project: &Path, content: &str) {
+        let side = self.side_dir();
+        let file = self.root.join("tracked-list");
+        fs::write(&file, content).unwrap();
+        let side_args = |extra: &[&str]| {
+            let mut args = vec!["--git-dir", side.to_str().unwrap(), "--work-tree", project.to_str().unwrap()];
+            args.extend_from_slice(extra);
+            self.git(project, &args)
+        };
+        let sha = side_args(&["hash-object", "-w", file.to_str().unwrap()]);
+        side_args(&["update-index", "--cacheinfo", &format!("100644,{sha},.side-tracked")]);
+    }
+
     pub fn ls_files(&self, dir: &Path) -> Vec<String> {
         self.side(dir, &["ls-files"])
             .lines()

@@ -13,15 +13,7 @@ use crate::tracked::TrackedPaths;
 ///
 /// Returns an error if the path is not tracked or if unstaging fails.
 pub fn run(path: &Path) -> Result<()> {
-    let work_tree = git::repo_root()?;
-
-    // Normalize path: make it relative to work tree
-    let relative_path = if path.is_absolute() {
-        path.strip_prefix(&work_tree)
-            .map_or_else(|_| path.to_path_buf(), Path::to_path_buf)
-    } else {
-        path.to_path_buf()
-    };
+    let relative_path = git::repo_relative(path)?;
 
     // Open side repo
     let repo = SideRepo::open()?;
@@ -41,6 +33,18 @@ pub fn run(path: &Path) -> Result<()> {
     // Remove from tracked list
     tracked.remove(&relative_path);
     tracked.save(&repo)?;
+
+    // A path still inside another tracked directory stays versioned: only
+    // the redundant list entry goes away.
+    if let Some(parent) = tracked.covering(&relative_path) {
+        println!(
+            "{} {} (still tracked via {})",
+            "Removed entry:".yellow().bold(),
+            relative_path.display(),
+            parent.display()
+        );
+        return Ok(());
+    }
 
     // Unstage from side repo
     repo.unstage(&relative_path)?;
