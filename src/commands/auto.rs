@@ -13,8 +13,20 @@ use crate::tracked::TrackedPaths;
 pub fn run() -> Result<()> {
     let repo = SideRepo::open()?;
 
-    if !repo.is_initialized() {
+    if !repo.has_side_repo() {
         return Err(Error::NoTrackedPaths);
+    }
+    // First run in a linked worktree sets up its side state.
+    repo.ensure_initialized()?;
+
+    // Staging now would commit conflict markers as the merge result.
+    if repo.merge_in_progress() {
+        println!(
+            "{} {}",
+            "[git-side]".dimmed(),
+            "Side merge in progress; skipping auto. Finish with 'git side merge --continue'.".yellow()
+        );
+        return Ok(());
     }
 
     // Load tracked paths
@@ -65,8 +77,9 @@ pub fn run() -> Result<()> {
                 prefix,
                 files.len().to_string().cyan()
             );
-            // Try to push — silently ignored if no remote
-            if repo.push().is_ok() {
+            // Try to push — silently ignored if no remote. Linked worktrees
+            // commit to their own branch; only main is pushed.
+            if repo.worktree.is_none() && repo.push().is_ok() {
                 println!("{} {}", prefix, "Pushed to remote.".green().bold());
             }
         }

@@ -11,6 +11,7 @@ use crate::side_repo::SideRepo;
 /// Returns an error if the side repo cannot be opened or push fails.
 pub fn run() -> Result<()> {
     let repo = SideRepo::open()?;
+    repo.require_main_worktree("push")?;
     repo.ensure_initialized()?;
 
     // Force push to origin main — local wins, no questions asked
