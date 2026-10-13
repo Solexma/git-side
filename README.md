@@ -143,13 +143,15 @@ git side <command> [<args>]
 ### Commands
 
 ```bash
-git side add <path>                    # track file or directory (forced, bypasses gitignore)
+git side add <path>                    # track file or directory, or re-stage a tracked one (forced, bypasses gitignore)
 git side rm <path>                     # untrack path from side repo
 git side status                        # show side repo status
 git side commit -m "msg"               # commit in side repo
 git side log                           # show side repo history
 git side ls-files [<args>]             # list files in side repo (pass-through to git ls-files)
 git side auto                          # sync, commit, and push (if remote exists) using last main repo message
+git side checkout                      # check out side files missing from this worktree (never overwrites)
+git side merge <worktree|main>         # merge side changes between worktrees (--continue / --abort)
 git side init --path <dir>             # set custom base path for this project's side repo
 git side hook install [--on <hook>]    # install git hook to run auto (default: post-commit)
 git side hook uninstall [--on <hook>]  # remove git hook
@@ -200,7 +202,29 @@ Push and pull are intentionally simple and conflict-free:
 
 `git side auto` will also push automatically if a remote is configured. If no remote exists, the push is silently skipped.
 
-This matches the "local-only state" philosophy. If you need merge semantics, you're probably tracking the wrong files.
+This matches the "local-only state" philosophy. If you need merge semantics with a remote, you're probably tracking the wrong files.
+
+### Worktrees
+
+Each linked worktree (`git worktree add`) gets its own side state: its own index and tracked list, on a side branch `wt/<name>` that starts from the side repo's `main`.
+
+```bash
+git worktree add ../feature
+cd ../feature
+git side checkout              # side files (CLAUDE.md, notes, ...) appear here
+git side add docs/plan.md      # tracked and committed on wt/feature
+git side commit -m "plan"
+
+cd ../project
+git side info                  # lists unmerged worktree branches
+git side merge feature         # bring the worktree's side changes into main
+```
+
+- The first `git side` command in a new worktree checks out the side files it is missing. Existing files are never overwritten.
+- `git side merge main`, run inside a worktree, pulls in side changes made in the main worktree.
+- Conflicts are resolved like in Git: edit the files, then `git side merge --continue` (or `--abort`).
+- `push` and `pull` only run in the main worktree. `auto` in a worktree commits to its side branch without pushing.
+- Removing the worktree (`git worktree remove`) lets Git clean up its side state. The `wt/<name>` branch is kept until you delete it.
 
 ## Design goals
 
@@ -215,7 +239,7 @@ This matches the "local-only state" philosophy. If you need merge semantics, you
 
 `git-side` intentionally does not:
 
-- handle merge conflicts (push/pull are force operations)
+- handle merge conflicts with remotes (push/pull are force operations)
 - encrypt or secure files
 - replace secrets managers
 - act as a dotfiles manager
